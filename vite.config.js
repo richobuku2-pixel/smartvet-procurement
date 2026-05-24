@@ -60,7 +60,8 @@ export default defineConfig(({ mode }) => {
                 connectionTimeout: 15000,
                 greetingTimeout: 10000,
                 socketTimeout: 20000,
-                auth: { type: 'login', user: fromEmail, pass: appPass },
+                authMethod: 'LOGIN',
+                auth: { user: fromEmail, pass: appPass },
                 tls: { rejectUnauthorized: true },
               });
 
