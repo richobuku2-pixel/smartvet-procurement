@@ -153,7 +153,8 @@ export function AuthProvider({ children }) {
     storage.set('resetTokens', tokens);
 
     // Build the link — works for both dev (localhost:5173) and production
-    const resetLink = `${window.location.origin}/?resetToken=${token}`;
+    const base = import.meta.env.VITE_APP_URL?.replace(/\/$/, '') || window.location.origin;
+    const resetLink = `${base}/?resetToken=${token}`;
 
     const res = await fetch('/api/send-reset', {
       method: 'POST',
