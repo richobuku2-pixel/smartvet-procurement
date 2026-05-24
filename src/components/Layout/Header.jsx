@@ -1,11 +1,22 @@
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import { ROLES } from '../../data/seedData';
 import { useState } from 'react';
 import logoUrl from '/logo.png';
 
+function timeAgo(iso) {
+  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function Header() {
   const { currentUser, logout } = useAuth();
+  const { stockCounts, dispatch } = useApp();
   const [showMenu, setShowMenu] = useState(false);
+  const lastCount = stockCounts[0] ?? null;
 
   const initials = currentUser?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U';
 
@@ -32,18 +43,21 @@ export default function Header() {
         Animal Health meets Innovation
       </p>
 
-      {/* POS quick-link */}
-      <a
-        href="https://salesroute-web.vercel.app/stock-movements#/staff"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-xs font-semibold text-white transition-colors"
-        title="Open OneTap POS — Stock Movements"
+      {/* Stock Count shortcut */}
+      <button
+        onClick={() => dispatch({ type: 'SET_TAB', payload: 'inventory' })}
+        className="hidden sm:flex flex-col items-center gap-0 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-xs font-semibold text-white transition-colors"
+        title="Go to Inventory — Record Stock Count"
       >
-        <span>🖥️</span>
-        <span>OneTap POS</span>
-        <span className="text-green-300 text-xs">↗</span>
-      </a>
+        <span className="flex items-center gap-1.5">
+          <span>📋</span>
+          <span>Stock Count</span>
+        </span>
+        {lastCount
+          ? <span className="text-green-300 text-[10px] font-normal">last: {timeAgo(lastCount.date)}</span>
+          : <span className="text-green-400/60 text-[10px] font-normal">never recorded</span>
+        }
+      </button>
 
       {/* User menu */}
       <div className="flex items-center gap-3 relative">

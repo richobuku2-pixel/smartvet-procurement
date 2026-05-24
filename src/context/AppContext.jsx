@@ -47,6 +47,8 @@ const initialState = () => {
     locations:         storage.get('locations', LOCATIONS),
     transferOrders:    storage.get('transferOrders', []),
     locationInventory: storage.get('locationInventory', {}),
+    stockCounts:       storage.get('stockCounts', []),
+    posApiUrl:         storage.get('posApiUrl', ''),
     currentRole: 'admin',
     currentUser: null,
     notifications: [],
@@ -65,6 +67,8 @@ function reducer(state, action) {
     case 'SET_LOCATIONS':          return { ...state, locations: action.payload };
     case 'SET_TRANSFER_ORDERS':    return { ...state, transferOrders: action.payload };
     case 'SET_LOCATION_INVENTORY': return { ...state, locationInventory: action.payload };
+    case 'SET_STOCK_COUNTS':       return { ...state, stockCounts: action.payload };
+    case 'SET_POS_API_URL':        return { ...state, posApiUrl: action.payload };
     case 'SET_ROLE':               return { ...state, currentRole: action.payload };
     case 'SET_TAB':                return { ...state, activeTab: action.payload };
     case 'ADD_NOTIFICATION':
@@ -90,6 +94,8 @@ export function AppProvider({ children }) {
   useEffect(() => { storage.set('locations',         state.locations);         }, [state.locations]);
   useEffect(() => { storage.set('transferOrders',    state.transferOrders);    }, [state.transferOrders]);
   useEffect(() => { storage.set('locationInventory', state.locationInventory); }, [state.locationInventory]);
+  useEffect(() => { storage.set('stockCounts',       state.stockCounts);       }, [state.stockCounts]);
+  useEffect(() => { storage.set('posApiUrl',         state.posApiUrl);         }, [state.posApiUrl]);
   useEffect(() => { storage.set('currentRole',       state.currentRole);       }, [state.currentRole]);
 
   const notify = useCallback((message, type = 'success') => {
@@ -411,6 +417,36 @@ export function AppProvider({ children }) {
     notify('Transfer order deleted.', 'success');
   }, [state.transferOrders, notify]);
 
+  /** Save a physical stock count session and update main warehouse inventory */
+  const recordStockCount = useCallback((countData) => {
+    // countData: { counts: {productId: qty}, countedBy, notes, source }
+    const session = {
+      id: `sc_${Date.now()}`,
+      date: new Date().toISOString(),
+      countedBy: countData.countedBy || 'Unknown',
+      notes: countData.notes || '',
+      counts: countData.counts,
+      itemCount: Object.keys(countData.counts).length,
+      source: countData.source || 'manual',
+    };
+
+    const newInventory = { ...state.inventory, ...countData.counts };
+    dispatch({ type: 'SET_INVENTORY', payload: newInventory });
+    dispatch({ type: 'SET_STOCK_COUNTS', payload: [session, ...state.stockCounts].slice(0, 50) });
+    notify(`Stock count saved — ${session.itemCount} product(s) updated by ${session.countedBy}.`, 'success');
+
+    // Auto-generate draft reorders for any items now below threshold
+    const newDrafts = generateDraftOrders(newInventory, state.orders, state.products, state.suppliers);
+    if (newDrafts.length > 0) {
+      dispatch({ type: 'SET_ORDERS', payload: [...state.orders, ...newDrafts] });
+      newDrafts.forEach(o => notify(`Reorder draft created: ${o.supplier} — ${o.items.length} item(s)`, 'info'));
+    }
+  }, [state.inventory, state.stockCounts, state.orders, state.products, state.suppliers, notify]);
+
+  const setPosApiUrl = useCallback((url) => {
+    dispatch({ type: 'SET_POS_API_URL', payload: url });
+  }, []);
+
   const value = {
     ...state,
     dispatch,
@@ -450,6 +486,9 @@ export function AppProvider({ children }) {
     updateTransferStatus,
     receiveTransfer,
     deleteTransferOrder,
+    // Stock counts
+    recordStockCount,
+    setPosApiUrl,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
