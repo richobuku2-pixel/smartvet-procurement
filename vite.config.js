@@ -52,16 +52,15 @@ export default defineConfig(({ mode }) => {
             try {
               const { default: nodemailer } = await import('nodemailer');
 
-              // Zoho: port 587 + STARTTLS is more reliable than 465+SSL
               const transporter = nodemailer.createTransport({
                 host: 'smtp.zoho.com',
                 port: 587,
-                secure: false,           // STARTTLS (upgrades to TLS after EHLO)
-                requireTLS: true,        // reject if server won't upgrade
+                secure: false,
+                requireTLS: true,
                 connectionTimeout: 15000,
                 greetingTimeout: 10000,
                 socketTimeout: 20000,
-                auth: { user: fromEmail, pass: appPass },
+                auth: { type: 'login', user: fromEmail, pass: appPass },
                 tls: { rejectUnauthorized: true },
               });
 

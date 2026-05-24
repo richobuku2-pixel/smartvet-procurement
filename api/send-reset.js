@@ -28,7 +28,7 @@ export default async function handler(req, res) {
       connectionTimeout: 15000,
       greetingTimeout: 10000,
       socketTimeout: 20000,
-      auth: { user: fromEmail, pass: appPass },
+      auth: { type: 'login', user: fromEmail, pass: appPass },
       tls: { rejectUnauthorized: true },
     });
 
