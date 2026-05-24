@@ -1045,7 +1045,7 @@ export default function Inventory() {
           <p className="text-sm text-gray-500 mt-0.5">
             {editMode
               ? <>Edit the <span className="font-semibold text-gray-700">Current Stock</span> column, then Save. Stock also updates automatically when orders are received.</>
-              : <>{products.length} product{products.length !== 1 ? 's' : ''} tracked · read-only view.{stockCounts[0] ? <> Last count: <span className="font-medium text-gray-700">{new Date(stockCounts[0].date).toLocaleDateString()}</span> by {stockCounts[0].countedBy}.</> : <> No stock count recorded yet.</>}</>
+              : <>{products.length} product{products.length !== 1 ? 's' : ''} tracked · stock updates automatically when orders are received.</>
             }
           </p>
         </div>
@@ -1056,11 +1056,6 @@ export default function Inventory() {
               + Add from Catalogue
             </button>
           )}
-          <button onClick={() => setShowStockCount(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-300 text-gray-600 bg-white rounded-lg text-sm font-semibold hover:bg-gray-50 shadow-sm">
-            📋 Record Stock Count
-          </button>
-
           {canManage && !editMode && (
             <button
               onClick={() => setEditMode(true)}
@@ -1097,7 +1092,7 @@ export default function Inventory() {
       )}
 
       {/* ── Summary cards ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
           <p className="text-xs text-gray-400 font-medium">Products Tracked</p>
           <p className="text-2xl font-bold text-gray-800 mt-0.5">{products.length}</p>
@@ -1118,6 +1113,28 @@ export default function Inventory() {
           <p className="text-xs text-gray-400 font-medium">Retail Value</p>
           <p className="text-sm font-bold text-green-700 mt-0.5 font-mono">{formatCurrency(retailValue)}</p>
         </div>
+        {/* Stock Count card — doubles as the trigger */}
+        <button
+          onClick={() => setShowStockCount(true)}
+          className="group text-left border-2 border-dashed border-teal-300 bg-teal-50/40 hover:bg-teal-50 hover:border-teal-500 rounded-xl px-4 py-3 shadow-sm transition-colors"
+        >
+          <p className="text-xs text-teal-600 font-medium flex items-center gap-1">
+            <span>📋</span> Stock Count
+          </p>
+          {stockCounts[0] ? (
+            <>
+              <p className="text-sm font-bold text-gray-800 mt-0.5 leading-tight">
+                {new Date(stockCounts[0].date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </p>
+              <p className="text-[11px] text-teal-600 font-medium mt-0.5 group-hover:underline">Record new →</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-bold text-amber-600 mt-0.5">Never done</p>
+              <p className="text-[11px] text-teal-600 font-medium mt-0.5 group-hover:underline">Start count →</p>
+            </>
+          )}
+        </button>
       </div>
 
       {/* ── Save confirmation ────────────────────────────────────────────────── */}
