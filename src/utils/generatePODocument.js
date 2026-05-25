@@ -19,6 +19,7 @@ export const BUYER = {
   address: 'Dispatch Warehouse, Plot 75, Jomo Kenyatta Road, Elephante Commons, Gulu City',
   pobox:   'P. O. Box 361968, Gulu',
   contact: 'Richard Obuku',
+  phone:   '+256 393 194 736',
   email:   'hello@smartvet.africa',
   web:     'smartvetafrica.com',
 };
@@ -173,8 +174,8 @@ export function generateExcelPO({ orderNo, orderDate, supplier, supplierDetails 
   // ── Rows 5–8: Buyer details (left) + PO meta (right) ──────────────────────
   const infoRows = [
     [BUYER.address,                              'ORDER DATE:',     orderDate || new Date().toLocaleDateString('en-GB')],
-    [`Contact: ${BUYER.contact}`,                'PAYMENT TERMS:',  paymentTerms],
-    [`${BUYER.email}  ·  ${BUYER.web}`,          'CURRENCY:',       'Uganda Shillings (UGX)'],
+    [`Contact: ${BUYER.contact}  ·  Tel: ${BUYER.phone}`, 'PAYMENT TERMS:',  paymentTerms],
+    [`${BUYER.email}  ·  ${BUYER.web}`,                  'CURRENCY:',       'Uganda Shillings (UGX)'],
     [`${BUYER.pobox}  ·  Gulu City, Uganda`,     'REQUIRED BY:',    'To be confirmed'],
   ];
   for (let i = 0; i < infoRows.length; i++) {
@@ -525,7 +526,7 @@ export function generatePDFPO({ orderNo, orderDate, supplier, supplierDetails = 
       <div class="lbl">Buyer</div>
       <div class="nm">${BUYER.name}</div>
       <p>${BUYER.address}</p>
-      <p>Contact: ${BUYER.contact}</p>
+      <p>Contact: ${BUYER.contact} &bull; Tel: ${BUYER.phone}</p>
       <p>${BUYER.email} &bull; <span class="web">${BUYER.web}</span></p>
     </div>
     <div class="party">

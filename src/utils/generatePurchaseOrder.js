@@ -40,7 +40,10 @@ export const SUPPLIER = {
 export const BUYER = {
   name:    'SmartVet Africa',
   address: 'Dispatch Warehouse, Plot 75, Jomo Kenyatta Road, Elephante Commons, Gulu City',
+  pobox:   'P. O. Box 361968, Gulu',
   contact: 'Richard Obuku',
+  phone:   '+256 393 194 736',
+  email:   'hello@smartvet.africa',
   web:     'smartvetafrica.com',
 };
 
@@ -672,7 +675,7 @@ export function generatePurchaseOrder({
     [4, `SUPPLIER: ${SUPPLIER.name}  |  ${SUPPLIER.address}`, 'ORDER NO:', orderNo],
     [5, `Tel: ${SUPPLIER.tel}  |  Email: ${SUPPLIER.email}`, 'ORDER DATE:', dateStr],
     [6, `SHIP TO: ${BUYER.name}  |  ${BUYER.address}`, 'REQUIRED BY:', 'To be confirmed'],
-    [7, `Contact: ${BUYER.contact}  |  ${BUYER.web}`, 'PAYMENT TERMS:', paymentTerms],
+    [7, `Contact: ${BUYER.contact}  |  Tel: ${BUYER.phone}  |  ${BUYER.email}`, 'PAYMENT TERMS:', paymentTerms],
   ];
   for (const [r, left, key, val] of infoRows) {
     rowHeights[r] = 16;
