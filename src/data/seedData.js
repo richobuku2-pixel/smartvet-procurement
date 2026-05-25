@@ -94,6 +94,19 @@ export const SUPPLIERS = {
     notes: 'Subsidiary of Norbrook Laboratories Ltd (N. Ireland). No. 1 animal healthcare company in Kenya.',
     catalogue: [], // populated by AppContext on first load
   },
+  'ConcFeed International': {
+    contactEmail: 'info@concfeed.com',
+    contactPerson: 'Sales Team',
+    phone: '+256 700 000000',
+    location: 'Kampala, Uganda',
+    address: 'Kampala, Uganda',
+    web: 'concfeed.com',
+    paymentTerms: 'Net 30',
+    minimumOrderQuantity: 1,
+    leadTimeDays: 5,
+    notes: 'Specialist in livestock nutritional supplements. Distributors of Glucovit, electrolytes, growth promoters and mineral supplements across East Africa.',
+    catalogue: [],
+  },
   'Sanga Vet Chem Ltd': {
     contactEmail: 'info@sangavetchem.com',
     contactPerson: '',

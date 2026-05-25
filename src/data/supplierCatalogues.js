@@ -591,6 +591,12 @@ export const GLOBAL_VET_CATALOGUE = [
     indication:'Roundworms (Ascaridiasis) in free-range & semi-intensive flocks',
     unit:'boxes', note:'30g in 20–30L per 100 birds. 1-day treatment only.' },
 
+  { id:'DEW-01b', section:'Poultry Dewormers', sectionColor:C.burnt, priority:'★★★',
+    name:'Ascarex D Worm Powder — Piperazine Dihydrochloride (100g Bulk Pack)',
+    spec:'100g pack  |  Water soluble powder  |  Bulk dispensing size',
+    indication:'Roundworms (Ascaridiasis) — bulk pack for dark store dispensing & repackaging',
+    unit:'packs', note:'Dose: 30g per 100 birds in 20–30L water. 1-day treatment only. Ideal for splitting into smaller retail sachets.' },
+
   { id:'DEW-02', section:'Poultry Dewormers', sectionColor:C.burnt, priority:'★★★',
     name:'Piperamentic — Piperazine as Citrate',
     spec:'100g or 500g  |  State size',
@@ -1204,5 +1210,101 @@ export function makeSangaVetSupplier() {
     leadTimeDays: 2,
     notes: 'NDA-licensed local Ugandan manufacturer. Products: acaricides, anthelmintics, wound care. Manufacturing since August 2021. Supports local industry.',
     catalogue: SANGAVET_CATALOGUE,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONCFEED INTERNATIONAL — Feed Supplements, Vitamins & Electrolytes
+// Distributor of Glucovit and allied livestock nutritional supplements.
+// Contact SmartVet Africa procurement team for current pricing.
+// ═══════════════════════════════════════════════════════════════════════════════
+const C6 = {
+  green:  '2D6A4F',
+  gold:   'B5830A',
+  teal:   '1B6B6B',
+  blue:   '1D3557',
+  orange: '9C4A1A',
+};
+
+export const CONCFEED_CATALOGUE = [
+  // ── Vitamins & Energy Supplements ──
+  { id:'CF-VE01', section:'Vitamins & Energy Supplements', sectionColor:C6.green, priority:'★★★',
+    name:'Glucovit — Glucose + Electrolytes + Multivitamins',
+    spec:'Oral powder  |  Sachet / bulk pack  |  Water soluble',
+    indication:'Energy boost, stress recovery, dehydration — all livestock & poultry. Post-illness, post-transport, heatstress, vaccination support.',
+    unit:'sachets', note:'Dissolve in drinking water. Ideal after vaccination, disease recovery, or long transport. Provides fast glucose energy + electrolyte rebalancing.' },
+
+  { id:'CF-VE02', section:'Vitamins & Energy Supplements', sectionColor:C6.green, priority:'★★★',
+    name:'Glucovit Plus — Glucose + Electrolytes + Amino Acids + Vit C',
+    spec:'Oral powder  |  Enhanced formula with amino acids',
+    indication:'Advanced stress & recovery supplement — high-performance broilers, layers, dairy cattle. Boosts FCR & immune response.',
+    unit:'sachets', note:'Higher specification than standard Glucovit. Recommended for commercial flocks and post-antibiotic recovery.' },
+
+  { id:'CF-VE03', section:'Vitamins & Energy Supplements', sectionColor:C6.green, priority:'★★',
+    name:'ConcVit AD3E — Fat-Soluble Vitamins A, D3, E',
+    spec:'Oil-based concentrate  |  Per-litre dosing',
+    indication:'Vitamin A, D3 & E deficiency — reproductive performance, bone development, immune function in poultry & cattle',
+    unit:'bottles', note:'Mix in drinking water or feed. Critical for layers during peak production.' },
+
+  { id:'CF-VE04', section:'Vitamins & Energy Supplements', sectionColor:C6.green, priority:'★★',
+    name:'ConcVit B-Complex — Water-Soluble B Vitamins',
+    spec:'Water soluble powder  |  B1, B2, B6, B12, Niacin, Pantothenic Acid',
+    indication:'B-vitamin deficiency — nervous disorders, poor growth, reduced egg production, leg weakness in broilers',
+    unit:'packs', note:'Add to drinking water. Especially useful in flocks on prolonged antibiotic therapy (antibiotics deplete gut B-vitamin synthesis).' },
+
+  // ── Electrolytes & Rehydration ──
+  { id:'CF-EL01', section:'Electrolytes & Rehydration', sectionColor:C6.teal, priority:'★★★',
+    name:'ConcLyte ORS — Oral Rehydration Salts for Livestock',
+    spec:'Sachet  |  Sodium chloride + potassium chloride + dextrose + sodium bicarbonate',
+    indication:'Dehydration, diarrhoea, heat stress, post-surgery recovery — cattle, sheep, goats, poultry',
+    unit:'sachets', note:'Dissolve 1 sachet per 5L water. Give ad lib or via drench. Critical for scouring calves.' },
+
+  { id:'CF-EL02', section:'Electrolytes & Rehydration', sectionColor:C6.teal, priority:'★★',
+    name:'ConcLyte Poultry — Poultry-Specific Electrolyte Blend',
+    spec:'Water soluble powder  |  Optimised for avian electrolyte balance',
+    indication:'Heat stress, transportation stress, vaccination reactions — broilers & layers',
+    unit:'packs', note:'1g per litre drinking water. Give for 3–5 days during or after stress events.' },
+
+  // ── Growth Promoters & Feed Additives ──
+  { id:'CF-GP01', section:'Growth Promoters & Feed Additives', sectionColor:C6.gold, priority:'★★',
+    name:'ConcGrow Broiler Promoter — Lysine + Methionine + Zinc + Probiotics',
+    spec:'Premix powder  |  Add to feed at 500g per tonne',
+    indication:'Improved FCR, daily weight gain, uniformity of flock — broilers weeks 2–5',
+    unit:'kg', note:'Mix thoroughly into feed. Reduces days-to-market by improving nutrient utilisation.' },
+
+  { id:'CF-GP02', section:'Growth Promoters & Feed Additives', sectionColor:C6.gold, priority:'★★',
+    name:'ConcLay Layer Booster — Calcium + Phosphorus + Trace Minerals',
+    spec:'Premix powder  |  Add to layer mash',
+    indication:'Peak egg production, strong eggshell quality, sustained laying performance',
+    unit:'kg', note:'Add at 2kg per 50kg feed. Critical during peak production (weeks 20–40).' },
+
+  // ── Mineral Supplements ──
+  { id:'CF-MS01', section:'Mineral Supplements', sectionColor:C6.orange, priority:'★★',
+    name:'ConcMin Cattle Lick — Macro & Trace Mineral Block',
+    spec:'5kg block  |  Salt + Calcium + Phosphorus + Zinc + Copper + Cobalt + Selenium',
+    indication:'Mineral deficiency prevention — grazing cattle, goats, sheep in mineral-poor soils',
+    unit:'blocks', note:'Free access — place in paddock or kraal. One block per 10–15 cattle. Replace when consumed.' },
+
+  { id:'CF-MS02', section:'Mineral Supplements', sectionColor:C6.orange, priority:'★',
+    name:'ConcMin Poultry Shell Grit — Crushed Oyster Shell',
+    spec:'5kg bag  |  Calcium carbonate 38%',
+    indication:'Calcium supplement for layers — strong eggshell formation, reduces thin-shelled & cracked eggs',
+    unit:'bags', note:'Offer free choice in a separate feeder alongside layer mash. Especially important in hot seasons when feed intake drops.' },
+];
+
+export function makeConcFeedSupplier() {
+  return {
+    name: 'ConcFeed International',
+    contactEmail: 'info@concfeed.com',
+    contactPerson: 'Sales Team',
+    phone: '+256 700 000000',
+    location: 'Kampala, Uganda',
+    address: 'Kampala, Uganda',
+    web: 'concfeed.com',
+    paymentTerms: 'Net 30',
+    minimumOrderQuantity: 1,
+    leadTimeDays: 5,
+    notes: 'Specialist in livestock nutritional supplements. Distributors of Glucovit, electrolytes, growth promoters and mineral supplements across East Africa.',
+    catalogue: CONCFEED_CATALOGUE,
   };
 }

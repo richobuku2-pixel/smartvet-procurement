@@ -8,6 +8,8 @@ import {
   makeUltravetisSupplier,
   makeNorbrookSupplier,
   makeSangaVetSupplier,
+  makeConcFeedSupplier,
+  GLOBAL_VET_CATALOGUE,
 } from '../data/supplierCatalogues';
 import { generateDraftOrders, calculateSupplierBalance } from '../utils/calculations';
 import { addDays, generateTransferOrderId } from '../utils/formatter';
@@ -28,13 +30,25 @@ const initialState = () => {
     ['Global Vet (U) Ltd', makeGlobalVetSupplier],
     ['Bukoola Vet',        makeBukoolaVetSupplier],
     ['Ultravetis Uganda',  makeUltravetisSupplier],
-    ['Norbrook Uganda',    makeNorbrookSupplier],
-    ['Sanga Vet Chem Ltd', makeSangaVetSupplier],
+    ['Norbrook Uganda',          makeNorbrookSupplier],
+    ['Sanga Vet Chem Ltd',       makeSangaVetSupplier],
+    ['ConcFeed International',   makeConcFeedSupplier],
   ];
   for (const [name, makeFn] of CATALOGUE_SEEDERS) {
     if (!suppliers[name] || !suppliers[name].catalogue.length) {
       const seeded = makeFn();
       suppliers[name] = { ...(suppliers[name] || {}), ...seeded };
+    }
+  }
+
+  // ── Catalogue patch: inject new items that may be missing from existing localStorage ──
+  const GV_PATCH_IDS = ['DEW-01b'];
+  const gv = suppliers['Global Vet (U) Ltd'];
+  if (gv?.catalogue?.length) {
+    const existingIds = new Set(gv.catalogue.map(i => i.id));
+    const newItems = GLOBAL_VET_CATALOGUE.filter(i => GV_PATCH_IDS.includes(i.id) && !existingIds.has(i.id));
+    if (newItems.length) {
+      suppliers['Global Vet (U) Ltd'] = { ...gv, catalogue: [...gv.catalogue, ...newItems] };
     }
   }
 
@@ -49,6 +63,7 @@ const initialState = () => {
     locationInventory: storage.get('locationInventory', {}),
     stockCounts:       storage.get('stockCounts', []),
     posApiUrl:         storage.get('posApiUrl', ''),
+    availabilityLog:   storage.get('availabilityLog', []),
     currentRole: 'admin',
     currentUser: null,
     notifications: [],
@@ -69,6 +84,7 @@ function reducer(state, action) {
     case 'SET_LOCATION_INVENTORY': return { ...state, locationInventory: action.payload };
     case 'SET_STOCK_COUNTS':       return { ...state, stockCounts: action.payload };
     case 'SET_POS_API_URL':        return { ...state, posApiUrl: action.payload };
+    case 'SET_AVAILABILITY_LOG':   return { ...state, availabilityLog: action.payload };
     case 'SET_ROLE':               return { ...state, currentRole: action.payload };
     case 'SET_TAB':                return { ...state, activeTab: action.payload };
     case 'ADD_NOTIFICATION':
@@ -96,6 +112,7 @@ export function AppProvider({ children }) {
   useEffect(() => { storage.set('locationInventory', state.locationInventory); }, [state.locationInventory]);
   useEffect(() => { storage.set('stockCounts',       state.stockCounts);       }, [state.stockCounts]);
   useEffect(() => { storage.set('posApiUrl',         state.posApiUrl);         }, [state.posApiUrl]);
+  useEffect(() => { storage.set('availabilityLog',   state.availabilityLog);   }, [state.availabilityLog]);
   useEffect(() => { storage.set('currentRole',       state.currentRole);       }, [state.currentRole]);
 
   const notify = useCallback((message, type = 'success') => {
@@ -447,6 +464,28 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_POS_API_URL', payload: url });
   }, []);
 
+  /**
+   * Log a supplier availability check-in.
+   * checks: [{ productId, productName, status: 'in_stock'|'out_of_stock'|'low_stock', notes }]
+   * source: 'manual' | 'paste' | 'url'
+   */
+  const logAvailabilityCheck = useCallback(({ supplier, checks, checkedBy, source = 'manual', notes = '' }) => {
+    const entry = {
+      id: `av_${Date.now()}`,
+      supplier,
+      date: new Date().toISOString(),
+      checkedBy: checkedBy || 'Unknown',
+      source,
+      notes,
+      checks,
+    };
+    const updated = [entry, ...state.availabilityLog].slice(0, 500);
+    dispatch({ type: 'SET_AVAILABILITY_LOG', payload: updated });
+    const inStock  = checks.filter(c => c.status === 'in_stock').length;
+    const outStock = checks.filter(c => c.status === 'out_of_stock').length;
+    notify(`Availability logged for ${supplier}: ${inStock} in stock, ${outStock} out of stock.`, 'success');
+  }, [state.availabilityLog, notify]);
+
   const value = {
     ...state,
     dispatch,
@@ -489,6 +528,8 @@ export function AppProvider({ children }) {
     // Stock counts
     recordStockCount,
     setPosApiUrl,
+    // Availability monitoring
+    logAvailabilityCheck,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

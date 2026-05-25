@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import OrderStatusBadge from '../components/OrderStatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmailPreviewModal from '../components/EmailPreviewModal';
 import PurchaseOrderModal from '../components/PurchaseOrderModal';
+import ProductFinder from '../components/ProductFinder';
 import { formatCurrency, formatDate, formatDateTime, daysUntil } from '../utils/formatter';
 import { ORDER_STATUSES, PO_PIPELINE } from '../data/seedData';
 import { storage } from '../utils/storage';
@@ -528,7 +529,7 @@ export default function Orders() {
   const {
     orders, updateOrderStatus, sendOrderEmail, deleteOrder,
     markAcknowledged, markDispatched, receiveOrder,
-    hasPermission, notify,
+    hasPermission, notify, dispatch: appDispatch, modals,
   } = useApp();
   const { currentUser } = useAuth();
 
@@ -542,6 +543,17 @@ export default function Orders() {
   const [poModalOpen, setPoModalOpen] = useState(false);
   const [poOrder, setPoOrder]         = useState(null);
   const [actionModal, setActionModal] = useState(null); // { type: 'acknowledge'|'dispatch'|'receive', order }
+  const [showFinder, setShowFinder]   = useState(false);
+
+  // Pre-open PO modal when ProductFinder triggers an order for a supplier
+  useEffect(() => {
+    const trigger = modals?.productFinderOrder;
+    if (trigger?.supplierName) {
+      setPoOrder({ supplier: trigger.supplierName });
+      setPoModalOpen(true);
+      appDispatch({ type: 'SET_MODAL', key: 'productFinderOrder', value: null });
+    }
+  }, [modals?.productFinderOrder, appDispatch]);
 
   const canAdvance = currentUser?.role === 'admin' || currentUser?.role === 'inventory_manager';
 
@@ -655,6 +667,23 @@ export default function Orders() {
         onClose={() => { setPoModalOpen(false); setPoOrder(null); }}
         prefillOrder={poOrder}
       />
+
+      {/* ── Product finder modal ────────────────────────────────────────── */}
+      {showFinder && <ProductFinder onClose={() => setShowFinder(false)} />}
+
+      {/* ── Find-a-product bar ──────────────────────────────────────────── */}
+      <div className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-teal-800">Not sure which supplier stocks what you need?</p>
+          <p className="text-xs text-teal-600 mt-0.5">Search across all supplier catalogues instantly</p>
+        </div>
+        <button
+          onClick={() => setShowFinder(true)}
+          className="flex-shrink-0 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+        >
+          🔍 Find a Product
+        </button>
+      </div>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">

@@ -4,6 +4,254 @@ import { useAuth } from '../context/AuthContext';
 import { PRODUCTS } from '../data/seedData';
 import CatalogueImportModal from '../components/CatalogueImportModal';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function timeAgo(iso) {
+  if (!iso) return null;
+  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60)  return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return `${days}d ago`;
+  if (days < 30)  return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+// ── Availability check-in modal ───────────────────────────────────────────────
+const STATUS_OPTS = [
+  { value: 'skip',         label: '— Skip —'      },
+  { value: 'in_stock',     label: '✓ In Stock'     },
+  { value: 'low_stock',    label: '⚠ Low Stock'    },
+  { value: 'out_of_stock', label: '✕ Out of Stock' },
+];
+
+function AvailabilityCheckinModal({ supplierName, catalogue, currentUser, onSave, onClose }) {
+  const [tier, setTier]               = useState('manual');
+  const [statuses, setStatuses]       = useState({});
+  const [itemNotes, setItemNotes]     = useState({});
+  const [checkinNotes, setCheckinNotes] = useState('');
+  const [pasteText, setPasteText]     = useState('');
+  const [parsedItems, setParsedItems] = useState(null);
+  const [urlInput, setUrlInput]       = useState('');
+
+  const setStatus = (id, val) => setStatuses(p => ({ ...p, [id]: val }));
+
+  const parsePaste = () => {
+    const lines = pasteText.split('\n').filter(l => l.trim());
+    const parsed = [];
+    for (const item of catalogue) {
+      const keywords = item.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      const matchLine = lines.find(l => {
+        const ll = l.toLowerCase();
+        return keywords.some(kw => ll.includes(kw));
+      });
+      if (!matchLine) continue;
+      const ll = matchLine.toLowerCase();
+      let status = 'in_stock';
+      if (/out of stock|not available|unavailable|0 units|nil\b/.test(ll)) status = 'out_of_stock';
+      else if (/low stock|limited|few left|running low/.test(ll)) status = 'low_stock';
+      parsed.push({ id: item.id, name: item.name, status, matchLine });
+    }
+    setParsedItems(parsed);
+  };
+
+  const handleSave = () => {
+    let checks = [];
+    if (tier === 'manual') {
+      checks = catalogue
+        .filter(item => statuses[item.id] && statuses[item.id] !== 'skip')
+        .map(item => ({ productId: item.id, productName: item.name, status: statuses[item.id], notes: itemNotes[item.id] || '' }));
+    } else if (tier === 'paste' && parsedItems) {
+      checks = parsedItems.map(p => ({ productId: p.id, productName: p.name, status: p.status, notes: '' }));
+    }
+    if (checks.length === 0) { alert('No products selected for logging.'); return; }
+    onSave({
+      supplier: supplierName,
+      checks,
+      checkedBy: currentUser?.name || currentUser?.email || 'Unknown',
+      source: tier === 'url' ? 'url_scrape' : tier === 'paste' ? 'paste' : 'manual',
+      notes: checkinNotes,
+    });
+    onClose();
+  };
+
+  const checkedCount = tier === 'manual'
+    ? Object.values(statuses).filter(s => s && s !== 'skip').length
+    : (parsedItems?.length || 0);
+
+  const TIERS = [
+    { key: 'manual', label: '📋 Manual Entry',    desc: 'Select products & set status' },
+    { key: 'paste',  label: '📄 Paste Price List', desc: 'Paste email or WhatsApp text' },
+    { key: 'url',    label: '🌐 URL / Scrape',     desc: 'Fetch from supplier website'  },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 pt-14">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-700 to-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+            {supplierName.charAt(0)}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-gray-900">Log Availability Check-in</p>
+            <p className="text-xs text-gray-400">{supplierName}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+        </div>
+
+        {/* Tier selector */}
+        <div className="flex gap-1.5 px-5 pt-3 pb-1">
+          {TIERS.map(t => (
+            <button key={t.key} onClick={() => setTier(t.key)}
+              className={`flex-1 px-3 py-2 rounded-lg text-left transition-colors ${
+                tier === t.key ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
+              <div className="text-xs font-semibold">{t.label}</div>
+              <div className={`text-[10px] mt-0.5 ${tier === t.key ? 'text-teal-100' : 'text-gray-400'}`}>{t.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+
+          {/* ── Manual ── */}
+          {tier === 'manual' && (
+            <>
+              <p className="text-xs text-gray-500">Set the current status for each product. "Skip" means it won't be recorded in this check-in.</p>
+              {catalogue.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">No catalogue items yet. Add products to this supplier's catalogue first.</p>
+              ) : (
+                <div className="space-y-1">
+                  {catalogue.map(item => (
+                    <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
+                        {item.section && <p className="text-[10px] text-gray-400">{item.section}</p>}
+                      </div>
+                      <select
+                        value={statuses[item.id] || 'skip'}
+                        onChange={e => setStatus(item.id, e.target.value)}
+                        className={`text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500 flex-shrink-0 ${
+                          !statuses[item.id] || statuses[item.id] === 'skip'
+                            ? 'text-gray-400 border-gray-200 bg-white'
+                            : statuses[item.id] === 'in_stock'
+                              ? 'text-green-700 border-green-200 bg-green-50'
+                              : statuses[item.id] === 'low_stock'
+                                ? 'text-amber-600 border-amber-200 bg-amber-50'
+                                : 'text-red-600 border-red-200 bg-red-50'
+                        }`}
+                      >
+                        {STATUS_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Paste ── */}
+          {tier === 'paste' && (
+            <>
+              <p className="text-xs text-gray-500">Paste a price list, email, or WhatsApp availability update. SmartVet will scan for known product names and infer their status.</p>
+              <textarea
+                value={pasteText}
+                onChange={e => { setPasteText(e.target.value); setParsedItems(null); }}
+                placeholder={"Paste price list or availability update here...\n\nExample:\nNewcastle Vaccine — In Stock — UGX 85,000\nGumboro Live — Out of Stock\nAmprolium 20% — Limited stock, 50 units left"}
+                rows={7}
+                className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono resize-none"
+              />
+              <button
+                onClick={parsePaste}
+                disabled={!pasteText.trim()}
+                className="px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50"
+              >
+                🔍 Parse &amp; Preview
+              </button>
+              {parsedItems !== null && (
+                <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                  <p className="text-xs font-semibold text-gray-600 mb-2">
+                    {parsedItems.length === 0 ? 'No matches found.' : `${parsedItems.length} product${parsedItems.length !== 1 ? 's' : ''} detected:`}
+                  </p>
+                  {parsedItems.length === 0 ? (
+                    <p className="text-xs text-gray-400">Try adjusting the paste text or switch to Manual Entry.</p>
+                  ) : parsedItems.map(p => (
+                    <div key={p.id} className="flex items-start gap-2 text-xs">
+                      <span className={`flex-shrink-0 font-bold ${p.status === 'in_stock' ? 'text-green-600' : p.status === 'low_stock' ? 'text-amber-500' : 'text-red-500'}`}>
+                        {p.status === 'in_stock' ? '✓' : p.status === 'low_stock' ? '⚠' : '✕'}
+                      </span>
+                      <span className="font-medium text-gray-800 flex-shrink-0">{p.name}</span>
+                      <span className="text-gray-400 truncate">{p.matchLine}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── URL ── */}
+          {tier === 'url' && (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500">Enter the URL of the supplier's price list or website. SmartVet will fetch and scan the page for product availability.</p>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={e => setUrlInput(e.target.value)}
+                  placeholder="https://supplier-website.com/pricelist"
+                  className="flex-1 text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <button
+                  disabled
+                  className="px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg opacity-50 cursor-not-allowed"
+                >
+                  🌐 Fetch
+                </button>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-700">
+                <p className="font-semibold mb-0.5">🚧 Coming soon</p>
+                <p>Automated URL scraping is being set up. Use <strong>Paste Price List</strong> or <strong>Manual Entry</strong> in the meantime.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Check-in notes */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Check-in Notes (optional)</label>
+            <input
+              type="text"
+              value={checkinNotes}
+              onChange={e => setCheckinNotes(e.target.value)}
+              placeholder="e.g. Spoke with Sales Team — prices valid until end of month"
+              className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+          <p className="text-xs text-gray-400">
+            {checkedCount} product{checkedCount !== 1 ? 's' : ''} will be logged
+          </p>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={checkedCount === 0}
+              className="px-5 py-2 bg-green-700 text-white text-xs font-semibold rounded-lg hover:bg-green-800 disabled:opacity-50 transition-colors"
+            >
+              ✓ Save Check-in
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Catalogue item form ───────────────────────────────────────────────────────
 const EMPTY_CAT_ITEM = { name: '', section: '', spec: '', indication: '', unit: '', priority: '★', note: '' };
 
@@ -266,15 +514,27 @@ function SupplierForm({ initial, isNew, onSubmit, onCancel }) {
 }
 
 export default function Suppliers() {
-  const { suppliers, products, addSupplier, updateSupplier, deleteSupplier, addCatalogueItem, deleteCatalogueItem, notify } = useApp();
+  const { suppliers, products, addSupplier, updateSupplier, deleteSupplier, addCatalogueItem, deleteCatalogueItem, notify, availabilityLog, logAvailabilityCheck } = useApp();
   const { currentUser } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null); // { name, details }
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [search, setSearch] = useState('');
   const [expandedCards, setExpandedCards] = useState({});
-  const [activeTab, setActiveTab] = useState({}); // { [supplierName]: 'details' | 'catalogue' }
+  const [activeTab, setActiveTab] = useState({}); // { [supplierName]: 'details' | 'catalogue' | 'availability' }
   const [importModal, setImportModal] = useState({ open: false, supplierName: null });
+  const [showCheckinModal, setShowCheckinModal] = useState(null); // supplierName | null
+
+  // Last-checked date per supplier (derived from availabilityLog)
+  const lastCheckedBySupplier = useMemo(() => {
+    const map = {};
+    for (const entry of (availabilityLog || [])) {
+      if (!map[entry.supplier] || new Date(entry.date) > new Date(map[entry.supplier])) {
+        map[entry.supplier] = entry.date;
+      }
+    }
+    return map;
+  }, [availabilityLog]);
 
   const canManage = currentUser?.role === 'admin' || currentUser?.role === 'procurement_manager';
 
@@ -348,14 +608,17 @@ export default function Suppliers() {
       </div>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Suppliers</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{Object.keys(suppliers || {}).length}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Products</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{PRODUCTS.length}</p>
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Catalogue</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">
+            {Object.values(suppliers || {}).reduce((s, d) => s + (d.catalogue?.length || 0), 0)}
+            <span className="text-sm font-normal text-gray-400 ml-1">products</span>
+          </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Avg. Lead Time</p>
@@ -366,6 +629,28 @@ export default function Suppliers() {
             <span className="text-sm font-normal text-gray-400 ml-1">days</span>
           </p>
         </div>
+        {/* Stale check-ins alert card */}
+        {(() => {
+          const stale = Object.keys(suppliers || {}).filter(n => {
+            const lc = lastCheckedBySupplier[n];
+            if (!lc) return true;
+            return (Date.now() - new Date(lc)) > 7 * 86400000;
+          });
+          return (
+            <div className={`rounded-xl border shadow-sm px-5 py-4 ${stale.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+              <p className={`text-xs font-medium uppercase tracking-wide ${stale.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                Stock Check-ins
+              </p>
+              <p className={`text-2xl font-bold mt-1 ${stale.length > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                {stale.length}
+                <span className="text-sm font-normal ml-1">{stale.length > 0 ? 'need check' : 'all current'}</span>
+              </p>
+              {stale.length > 0 && (
+                <p className="text-[10px] text-amber-500 mt-0.5 truncate">{stale.slice(0, 2).join(', ')}{stale.length > 2 ? ` +${stale.length - 2}` : ''}</p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Add form */}
@@ -424,7 +709,7 @@ export default function Suppliers() {
                 </div>
 
                 {/* Meta tags */}
-                <div className="flex items-center gap-2 mx-4 flex-shrink-0">
+                <div className="flex items-center gap-2 mx-4 flex-shrink-0 flex-wrap">
                   <span className="text-xs bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full font-medium">
                     📋 {(details.catalogue || []).length} catalogue
                   </span>
@@ -437,6 +722,26 @@ export default function Suppliers() {
                   <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-medium">
                     {details.paymentTerms || 'Net 30'}
                   </span>
+                  {/* Last-checked badge */}
+                  {(() => {
+                    const lc = lastCheckedBySupplier[name];
+                    if (!lc) return (
+                      <span className="text-xs bg-red-50 text-red-500 px-2.5 py-1 rounded-full font-medium">
+                        ⚠ never checked
+                      </span>
+                    );
+                    const daysSince = Math.floor((Date.now() - new Date(lc)) / 86400000);
+                    const cls = daysSince <= 7
+                      ? 'bg-green-50 text-green-700'
+                      : daysSince <= 30
+                        ? 'bg-amber-50 text-amber-600'
+                        : 'bg-red-50 text-red-500';
+                    return (
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${cls}`}>
+                        ✓ {timeAgo(lc)}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Actions */}
@@ -457,6 +762,13 @@ export default function Suppliers() {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={e => { e.stopPropagation(); setShowCheckinModal(name); }}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 font-medium flex items-center gap-1"
+                    title="Log availability check-in for this supplier"
+                  >
+                    📋 Check-in
+                  </button>
                   <button
                     onClick={() => toggleExpand(name)}
                     className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium"
@@ -486,24 +798,32 @@ export default function Suppliers() {
                     <>
                       {/* Tab bar */}
                       <div className="flex gap-0 border-b border-gray-100 px-5">
-                        {['Details', 'Catalogue'].map(tab => (
-                          <button
-                            key={tab}
-                            onClick={() => setActiveTab(p => ({ ...p, [name]: tab.toLowerCase() }))}
-                            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                              (activeTab[name] || 'details') === tab.toLowerCase()
-                                ? 'border-teal-600 text-teal-700'
-                                : 'border-transparent text-gray-400 hover:text-gray-600'
-                            }`}
-                          >
-                            {tab}
-                            {tab === 'Catalogue' && (
-                              <span className="ml-1.5 bg-gray-100 text-gray-500 rounded-full px-1.5 py-0.5 text-[10px]">
-                                {(details.catalogue || []).length}
-                              </span>
-                            )}
-                          </button>
-                        ))}
+                        {['Details', 'Catalogue', 'Availability'].map(tab => {
+                          const tabKey = tab.toLowerCase();
+                          const isActive = (activeTab[name] || 'details') === tabKey;
+                          const supplyLogs = (availabilityLog || []).filter(e => e.supplier === name);
+                          return (
+                            <button
+                              key={tab}
+                              onClick={() => setActiveTab(p => ({ ...p, [name]: tabKey }))}
+                              className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                                isActive ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-400 hover:text-gray-600'
+                              }`}
+                            >
+                              {tab}
+                              {tab === 'Catalogue' && (
+                                <span className="ml-1.5 bg-gray-100 text-gray-500 rounded-full px-1.5 py-0.5 text-[10px]">
+                                  {(details.catalogue || []).length}
+                                </span>
+                              )}
+                              {tab === 'Availability' && supplyLogs.length > 0 && (
+                                <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {supplyLogs.length}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {/* Tab content */}
@@ -553,6 +873,96 @@ export default function Suppliers() {
                             onOpenImport={() => setImportModal({ open: true, supplierName: name })}
                           />
                         )}
+
+                        {(activeTab[name] || 'details') === 'availability' && (() => {
+                          const supplyLogs = (availabilityLog || [])
+                            .filter(e => e.supplier === name)
+                            .sort((a, b) => new Date(b.date) - new Date(a.date));
+                          return (
+                            <div className="space-y-3">
+                              {/* Sub-header */}
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs text-gray-500">
+                                  {supplyLogs.length === 0
+                                    ? 'No check-ins recorded yet.'
+                                    : `${supplyLogs.length} check-in${supplyLogs.length !== 1 ? 's' : ''} · Last ${timeAgo(supplyLogs[0].date)}`}
+                                </p>
+                                <button
+                                  onClick={() => setShowCheckinModal(name)}
+                                  className="px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 flex items-center gap-1.5"
+                                >
+                                  + Log Check-in
+                                </button>
+                              </div>
+
+                              {/* Empty state */}
+                              {supplyLogs.length === 0 ? (
+                                <div className="py-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                  <p className="text-3xl mb-2">📋</p>
+                                  <p className="text-sm font-medium text-gray-500">No check-ins logged yet</p>
+                                  <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
+                                    Regularly logging availability helps you avoid stockouts before placing orders.
+                                  </p>
+                                  <button
+                                    onClick={() => setShowCheckinModal(name)}
+                                    className="mt-3 px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700"
+                                  >
+                                    Log First Check-in
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                  {supplyLogs.map(entry => {
+                                    const inStock  = (entry.checks || []).filter(c => c.status === 'in_stock').length;
+                                    const lowStock = (entry.checks || []).filter(c => c.status === 'low_stock').length;
+                                    const outStock = (entry.checks || []).filter(c => c.status === 'out_of_stock').length;
+                                    return (
+                                      <div key={entry.id} className="bg-white border border-gray-100 rounded-lg px-3 py-2.5 hover:border-gray-200 transition-colors">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-xs font-semibold text-gray-800">
+                                              {new Date(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400">{timeAgo(entry.date)}</span>
+                                            {entry.source === 'paste' && (
+                                              <span className="text-[10px] bg-blue-50 text-blue-600 rounded-full px-1.5 py-0.5">paste</span>
+                                            )}
+                                            {entry.source === 'url_scrape' && (
+                                              <span className="text-[10px] bg-purple-50 text-purple-600 rounded-full px-1.5 py-0.5">scrape</span>
+                                            )}
+                                          </div>
+                                          <span className="text-[10px] text-gray-400 flex-shrink-0">by {entry.checkedBy}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[11px] flex-wrap">
+                                          {inStock  > 0 && <span className="text-green-600 font-medium">✓ {inStock} in stock</span>}
+                                          {lowStock > 0 && <span className="text-amber-500 font-medium">⚠ {lowStock} low</span>}
+                                          {outStock > 0 && <span className="text-red-500 font-medium">✕ {outStock} out of stock</span>}
+                                          {(entry.checks || []).length === 0 && <span className="text-gray-400">No products logged</span>}
+                                        </div>
+                                        {entry.notes && (
+                                          <p className="text-[10px] text-gray-400 mt-1 italic truncate">{entry.notes}</p>
+                                        )}
+                                        {/* Product detail pills */}
+                                        {(entry.checks || []).filter(c => c.status !== 'in_stock').length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {(entry.checks || []).filter(c => c.status !== 'in_stock').map(c => (
+                                              <span key={c.productId}
+                                                className={`text-[10px] rounded-full px-2 py-0.5 font-medium ${
+                                                  c.status === 'low_stock' ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-500'
+                                                }`}>
+                                                {c.status === 'low_stock' ? '⚠' : '✕'} {c.productName}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </>
                   )}
@@ -562,6 +972,17 @@ export default function Suppliers() {
           );
         })}
       </div>
+
+      {/* Availability check-in modal */}
+      {showCheckinModal && (
+        <AvailabilityCheckinModal
+          supplierName={showCheckinModal}
+          catalogue={(suppliers[showCheckinModal]?.catalogue) || []}
+          currentUser={currentUser}
+          onSave={logAvailabilityCheck}
+          onClose={() => setShowCheckinModal(null)}
+        />
+      )}
 
       {/* Delete confirmation modal */}
       {deleteConfirm && (
