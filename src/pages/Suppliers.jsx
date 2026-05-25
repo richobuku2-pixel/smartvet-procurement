@@ -3,19 +3,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { PRODUCTS } from '../data/seedData';
 import CatalogueImportModal from '../components/CatalogueImportModal';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function timeAgo(iso) {
-  if (!iso) return null;
-  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
-  if (mins < 60)  return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7)   return `${days}d ago`;
-  if (days < 30)  return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
-}
+import { timeAgo } from '../utils/formatter';
 
 // ── Availability check-in modal ───────────────────────────────────────────────
 const STATUS_OPTS = [

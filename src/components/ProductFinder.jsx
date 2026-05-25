@@ -1,16 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-function timeAgo(iso) {
-  if (!iso) return null;
-  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
-  if (mins < 60)  return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+import { timeAgo } from '../utils/formatter';
 
 const STATUS_CHIP = {
   in_stock:     'bg-green-100 text-green-800',

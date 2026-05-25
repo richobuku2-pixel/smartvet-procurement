@@ -30,7 +30,7 @@ const VAT_RATE = 0.18;
 const EQUIPMENT_KEYWORDS = [
   'equipment', 'supplies', 'syringe', 'applicator', 'ear tag', 'eartag',
   'drencher', 'drench gun', 'instrument', 'needle', 'clip', 'injector',
-  'bolus gun', 'tag', 'applicator', 'tagger', 'hardware', 'consumable',
+  'bolus gun', 'tag', 'tagger', 'hardware', 'consumable',
 ];
 
 /**

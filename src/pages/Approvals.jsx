@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import OrderStatusBadge from '../components/OrderStatusBadge';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/formatter';
-import { SUPPLIERS } from '../data/seedData';
 import { calculateSupplierBalance } from '../utils/calculations';
 
-function ApprovalCard({ order, type, supplierAccount, onApprove, onReject, canApprove }) {
+function ApprovalCard({ order, type, supplierAccount, suppliers, onApprove, onReject, canApprove }) {
   const [comments, setComments] = useState('');
-  const sup = SUPPLIERS[order.supplier] || {};
+  const sup = suppliers[order.supplier] || {};
   const balance = calculateSupplierBalance(supplierAccount);
 
   return (
@@ -126,33 +126,27 @@ function ApprovalCard({ order, type, supplierAccount, onApprove, onReject, canAp
 }
 
 export default function Approvals() {
-  const { orders, supplierAccounts, updateOrderStatus, hasPermission, currentRole, notify } = useApp();
+  const { orders, suppliers, supplierAccounts, updateOrderStatus, hasPermission, notify } = useApp();
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('procurement');
 
   const procurementOrders = orders.filter(o => o.status === 'pending_procurement');
   const accountsOrders = orders.filter(o => o.status === 'pending_accounts');
 
+  const approverName = currentUser?.name || currentUser?.email || 'Unknown';
+  const approverId   = currentUser?.id   || currentUser?.email || 'unknown';
+
   const handleProcurementApprove = (order, comments) => {
     if (!hasPermission('approve_procurement')) return notify('No permission to approve procurement orders', 'error');
     updateOrderStatus(order.id, 'pending_accounts', {
-      procurementApproval: {
-        approvedAt: new Date().toISOString(),
-        approverName: currentRole === 'admin' ? 'Admin User' : 'Procurement Manager',
-        approverId: currentRole,
-        comments,
-      },
+      procurementApproval: { approvedAt: new Date().toISOString(), approverName, approverId, comments },
     });
     notify(`Order ${order.orderId} approved — forwarded to Accounts`);
   };
 
   const handleProcurementReject = (order, comments) => {
     updateOrderStatus(order.id, 'rejected', {
-      procurementApproval: {
-        approvedAt: new Date().toISOString(),
-        approverName: currentRole,
-        approverId: currentRole,
-        comments: `REJECTED: ${comments}`,
-      },
+      procurementApproval: { approvedAt: new Date().toISOString(), approverName, approverId, comments: `REJECTED: ${comments}` },
     });
     notify(`Order ${order.orderId} rejected`, 'warning');
   };
@@ -160,24 +154,14 @@ export default function Approvals() {
   const handleAccountsApprove = (order, comments) => {
     if (!hasPermission('approve_accounts')) return notify('No permission to approve payment', 'error');
     updateOrderStatus(order.id, 'ready_to_send', {
-      accountsApproval: {
-        approvedAt: new Date().toISOString(),
-        approverName: currentRole === 'admin' ? 'Admin User' : 'Accounts Manager',
-        approverId: currentRole,
-        comments,
-      },
+      accountsApproval: { approvedAt: new Date().toISOString(), approverName, approverId, comments },
     });
     notify(`Order ${order.orderId} payment confirmed — ready to send`);
   };
 
   const handleAccountsReject = (order, comments) => {
     updateOrderStatus(order.id, 'rejected', {
-      accountsApproval: {
-        approvedAt: new Date().toISOString(),
-        approverName: currentRole,
-        approverId: currentRole,
-        comments: `REJECTED: ${comments}`,
-      },
+      accountsApproval: { approvedAt: new Date().toISOString(), approverName, approverId, comments: `REJECTED: ${comments}` },
     });
     notify(`Order ${order.orderId} rejected by accounts`, 'warning');
   };
@@ -223,6 +207,7 @@ export default function Approvals() {
                 key={order.id}
                 order={order}
                 type="procurement"
+                suppliers={suppliers}
                 supplierAccount={supplierAccounts[order.supplier]}
                 onApprove={handleProcurementApprove}
                 onReject={handleProcurementReject}
@@ -245,6 +230,7 @@ export default function Approvals() {
                 key={order.id}
                 order={order}
                 type="accounts"
+                suppliers={suppliers}
                 supplierAccount={supplierAccounts[order.supplier]}
                 onApprove={handleAccountsApprove}
                 onReject={handleAccountsReject}

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { SUPPLIERS } from '../data/seedData';
 import { formatCurrency, formatDate } from '../utils/formatter';
 import { calculateSupplierBalance } from '../utils/calculations';
 
@@ -55,11 +54,11 @@ function PaymentForm({ supplierName, onSubmit, onCancel }) {
   );
 }
 
-function SupplierDetail({ name, account, orders, onRecordPayment, hasPermission }) {
+function SupplierDetail({ name, account, orders, suppliers, onRecordPayment, hasPermission }) {
   const [tab, setTab] = useState('credits');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const balance = calculateSupplierBalance(account);
-  const sup = SUPPLIERS[name] || {};
+  const sup = suppliers[name] || {};
 
   const supplierOrders = orders.filter(o => o.supplier === name && o.status === 'sent');
 
@@ -176,10 +175,10 @@ function SupplierDetail({ name, account, orders, onRecordPayment, hasPermission 
 }
 
 export default function SupplierAccounts() {
-  const { orders, supplierAccounts, recordPayment, hasPermission } = useApp();
+  const { orders, suppliers, supplierAccounts, recordPayment, hasPermission } = useApp();
   const [selectedSupplier, setSelectedSupplier] = useState(null);
 
-  const supplierNames = [...new Set([...Object.keys(SUPPLIERS), ...Object.keys(supplierAccounts)])];
+  const supplierNames = [...new Set([...Object.keys(suppliers), ...Object.keys(supplierAccounts)])];
 
   return (
     <div className="p-6 space-y-5 max-w-7xl mx-auto">
@@ -192,7 +191,7 @@ export default function SupplierAccounts() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {supplierNames.map(name => {
           const account = supplierAccounts[name];
-          const sup = SUPPLIERS[name] || {};
+          const sup = suppliers[name] || {};
           const balance = calculateSupplierBalance(account);
           const isSelected = selectedSupplier === name;
 
@@ -228,6 +227,7 @@ export default function SupplierAccounts() {
                     name={name}
                     account={account || { credits: [], payments: [], balance: 0 }}
                     orders={orders}
+                    suppliers={suppliers}
                     onRecordPayment={recordPayment}
                     hasPermission={hasPermission('record_payments')}
                   />

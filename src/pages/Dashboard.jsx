@@ -6,7 +6,6 @@ import EmailPreviewModal from '../components/EmailPreviewModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { formatCurrency, formatDate, formatDaysAgo, daysUntil } from '../utils/formatter';
 import { calculateSupplierBalance } from '../utils/calculations';
-import { SUPPLIERS } from '../data/seedData';
 import { useState } from 'react';
 
 export default function Dashboard() {
@@ -20,7 +19,7 @@ export default function Dashboard() {
   const sentOrders = orders.filter(o => o.status === 'sent');
   const totalOutstanding = Object.values(supplierAccounts).reduce((s, a) => s + (a.balance || 0), 0);
 
-  const activeOrders = orders.filter(o => o.status !== 'received');
+  const activeOrders = orders.filter(o => o.status !== 'received' && o.status !== 'rejected');
 
   const handleAction = (order) => {
     const { status } = order;
@@ -194,7 +193,7 @@ export default function Dashboard() {
           </div>
           <div className="divide-y divide-gray-50">
             {upcomingDeliveries.map(order => {
-              const sup = SUPPLIERS[order.supplier] || {};
+              const sup = suppliers[order.supplier] || {};
               const sentDate = order.emailSent?.sentAt || order.updatedAt;
               const expectedDate = sentDate ? new Date(new Date(sentDate).getTime() + (sup.leadTimeDays || 7) * 86400000).toISOString() : null;
               const days = expectedDate ? daysUntil(expectedDate) : null;

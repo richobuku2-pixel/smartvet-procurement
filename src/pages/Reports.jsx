@@ -1,10 +1,9 @@
 import { useApp } from '../context/AppContext';
 import { formatCurrency, formatDate } from '../utils/formatter';
 import { calculateSupplierBalance } from '../utils/calculations';
-import { PRODUCTS, SUPPLIERS } from '../data/seedData';
 
 export default function Reports() {
-  const { orders, supplierAccounts, inventory } = useApp();
+  const { orders, suppliers, supplierAccounts, inventory, products } = useApp();
 
   const sentOrders = orders.filter(o => ['sent', 'received'].includes(o.status));
 
@@ -31,8 +30,8 @@ export default function Reports() {
   const totalOutstanding = Object.values(supplierAccounts).reduce((s, a) => s + (a.balance || 0), 0);
 
   // Inventory value
-  const inventoryValue = PRODUCTS.reduce((s, p) => s + (inventory[p.id] || 0) * p.landedCost, 0);
-  const inventoryRetailValue = PRODUCTS.reduce((s, p) => s + (inventory[p.id] || 0) * p.retailPrice, 0);
+  const inventoryValue = products.reduce((s, p) => s + (inventory[p.id] || 0) * p.landedCost, 0);
+  const inventoryRetailValue = products.reduce((s, p) => s + (inventory[p.id] || 0) * p.retailPrice, 0);
 
   const maxSpend = Math.max(...Object.values(spendBySupplier), 1);
 
@@ -134,7 +133,7 @@ export default function Reports() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h3 className="font-semibold text-gray-800 mb-4">Supplier Account Balances</h3>
           <div className="space-y-3">
-            {Object.keys(SUPPLIERS).map(name => {
+            {Object.keys(suppliers).map(name => {
               const account = supplierAccounts[name];
               const balance = calculateSupplierBalance(account);
               const credits = (account?.credits || []).reduce((s, c) => s + c.amount, 0);

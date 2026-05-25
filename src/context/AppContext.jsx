@@ -12,7 +12,7 @@ import {
   GLOBAL_VET_CATALOGUE,
 } from '../data/supplierCatalogues';
 import { generateDraftOrders, calculateSupplierBalance } from '../utils/calculations';
-import { addDays, generateTransferOrderId } from '../utils/formatter';
+import { generateTransferOrderId } from '../utils/formatter';
 
 const AppContext = createContext(null);
 
@@ -64,7 +64,7 @@ const initialState = () => {
     stockCounts:       storage.get('stockCounts', []),
     posApiUrl:         storage.get('posApiUrl', ''),
     availabilityLog:   storage.get('availabilityLog', []),
-    currentRole: 'admin',
+    currentRole: storage.get('currentRole', 'admin'),
     currentUser: null,
     notifications: [],
     activeTab: 'dashboard',
@@ -88,7 +88,7 @@ function reducer(state, action) {
     case 'SET_ROLE':               return { ...state, currentRole: action.payload };
     case 'SET_TAB':                return { ...state, activeTab: action.payload };
     case 'ADD_NOTIFICATION':
-      return { ...state, notifications: [...state.notifications, { id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, ...action.payload }] };
+      return { ...state, notifications: [...state.notifications, action.payload] };
     case 'REMOVE_NOTIFICATION':
       return { ...state, notifications: state.notifications.filter(n => n.id !== action.payload) };
     case 'SET_MODAL':
@@ -512,7 +512,6 @@ export function AppProvider({ children }) {
     deleteProduct,
     // Catalogues
     addCatalogueItem,
-    updateCatalogueItem,
     deleteCatalogueItem,
     // Permissions
     hasPermission,

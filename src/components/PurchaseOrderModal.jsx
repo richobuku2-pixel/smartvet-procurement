@@ -417,7 +417,6 @@ function Step3Download({ supplierName, supplierDetails, finalItems, orders, onBa
     };
     saveOrderRecord(record);
     setSaved(true);
-    notify(`Order ${orderNo} saved to system.`, 'success');
   };
 
   return (

@@ -32,12 +32,34 @@ export const daysUntil = (iso) => {
 
 export const generateOrderId = (existingOrders = []) => {
   const year = new Date().getFullYear();
-  const seq = existingOrders.filter(o => o.orderId?.includes(String(year))).length + 1;
-  return `PO-${year}-${String(seq).padStart(3, '0')}`;
+  const prefix = `PO-${year}-`;
+  const max = existingOrders.reduce((m, o) => {
+    if (!o.orderId?.startsWith(prefix)) return m;
+    const n = parseInt(o.orderId.slice(prefix.length), 10);
+    return isNaN(n) ? m : Math.max(m, n);
+  }, 0);
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
 };
 
 export const generateTransferOrderId = (existingTransfers = []) => {
   const year = new Date().getFullYear();
-  const seq = existingTransfers.filter(t => t.orderId?.includes(String(year))).length + 1;
-  return `TO-${year}-${String(seq).padStart(3, '0')}`;
+  const prefix = `TO-${year}-`;
+  const max = existingTransfers.reduce((m, t) => {
+    if (!t.orderId?.startsWith(prefix)) return m;
+    const n = parseInt(t.orderId.slice(prefix.length), 10);
+    return isNaN(n) ? m : Math.max(m, n);
+  }, 0);
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
+};
+
+export const timeAgo = (iso) => {
+  if (!iso) return null;
+  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60)  return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return `${days}d ago`;
+  if (days < 30)  return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
 };
