@@ -43,21 +43,6 @@ export default function Header() {
         Animal Health meets Innovation
       </p>
 
-      {/* Stock Count shortcut */}
-      <button
-        onClick={() => dispatch({ type: 'SET_TAB', payload: 'inventory' })}
-        className="hidden sm:flex flex-col items-center gap-0 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-xs font-semibold text-white transition-colors"
-        title="Go to Inventory — Record Stock Count"
-      >
-        <span className="flex items-center gap-1.5">
-          <span>📋</span>
-          <span>Stock Count</span>
-        </span>
-        {lastCount
-          ? <span className="text-green-300 text-[10px] font-normal">last: {timeAgo(lastCount.date)}</span>
-          : <span className="text-green-400/60 text-[10px] font-normal">never recorded</span>
-        }
-      </button>
 
       {/* User menu */}
       <div className="flex items-center gap-3 relative">
