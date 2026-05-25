@@ -22,10 +22,29 @@ function PriorityStars({ p }) {
 
 // ── main modal ────────────────────────────────────────────────────────────────
 export default function ProductFinder({ onClose }) {
-  const { suppliers, availabilityLog, dispatch } = useApp();
+  const { suppliers, availabilityLog, priceLog, dispatch } = useApp();
   const { currentUser } = useAuth();
   const [query, setQuery] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+
+  // Latest price per supplier-product (supplier → catalogueId → { price, date, source })
+  const latestPricesBySupplier = useMemo(() => {
+    const map = {}; // supplier → catalogueId → { price, date, source }
+    for (const entry of (priceLog || [])) {
+      if (!map[entry.supplier]) map[entry.supplier] = {};
+      for (const item of (entry.items || [])) {
+        const existing = map[entry.supplier][item.catalogueId];
+        if (!existing || new Date(entry.date) > new Date(existing.date)) {
+          map[entry.supplier][item.catalogueId] = {
+            price: item.unitPrice,
+            date: entry.date,
+            source: entry.source,
+          };
+        }
+      }
+    }
+    return map;
+  }, [priceLog]);
 
   // Latest availability status per supplier-product
   const latestAvailability = useMemo(() => {
@@ -163,6 +182,7 @@ export default function ProductFinder({ onClose }) {
                         {items.map(item => {
                           const avKey = `${supplierName}::${item.id}`;
                           const av = latestAvailability[avKey];
+                          const priceInfo = (latestPricesBySupplier[supplierName] || {})[item.id];
                           return (
                             <div key={item.id} className="px-5 py-3 flex items-start gap-3">
                               <div className="flex-1 min-w-0">
@@ -185,6 +205,11 @@ export default function ProductFinder({ onClose }) {
                                   {av && (
                                     <span className={`inline-block text-[10px] rounded-full px-2 py-0.5 font-semibold ${STATUS_CHIP[av.status]}`}>
                                       {STATUS_LABEL[av.status]} · {timeAgo(av.date)}
+                                    </span>
+                                  )}
+                                  {priceInfo && (
+                                    <span className="inline-block text-[10px] bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 font-semibold">
+                                      UGX {priceInfo.price.toLocaleString()} · {timeAgo(priceInfo.date)}
                                     </span>
                                   )}
                                 </div>

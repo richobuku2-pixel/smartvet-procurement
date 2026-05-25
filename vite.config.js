@@ -14,6 +14,33 @@ export default defineConfig(({ mode }) => {
       {
         name: 'smartvet-email-api',
         configureServer(server) {
+          // ── Price scraper proxy ────────────────────────────────────────────
+          server.middlewares.use('/api/scrape-prices', async (req, res) => {
+            res.setHeader('Content-Type', 'application/json');
+            if (req.method !== 'GET') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method not allowed' })); return; }
+            const rawUrl = new URL(req.url, 'http://localhost').searchParams.get('url');
+            if (!rawUrl) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing ?url= parameter' })); return; }
+            try {
+              new URL(rawUrl); // validate
+              const resp = await fetch(rawUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SmartVetPriceBot/1.0)', 'Accept': 'text/html,text/plain,*/*' },
+                signal: AbortSignal.timeout(15000),
+              });
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              const html = await resp.text();
+              const text = html
+                .replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+                .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(?:p|div|tr|li|h[1-6])>/gi, '\n')
+                .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#?[a-z0-9]+;/gi, ' ')
+                .split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+              res.statusCode = 200;
+              res.end(JSON.stringify({ ok: true, text, url: rawUrl }));
+            } catch (err) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+
           server.middlewares.use('/api/send-reset', async (req, res) => {
             res.setHeader('Content-Type', 'application/json');
 

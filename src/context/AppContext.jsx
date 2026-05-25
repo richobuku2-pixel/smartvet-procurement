@@ -64,6 +64,7 @@ const initialState = () => {
     stockCounts:       storage.get('stockCounts', []),
     posApiUrl:         storage.get('posApiUrl', ''),
     availabilityLog:   storage.get('availabilityLog', []),
+    priceLog:          storage.get('priceLog', []),
     currentRole: storage.get('currentRole', 'admin'),
     currentUser: null,
     notifications: [],
@@ -85,6 +86,7 @@ function reducer(state, action) {
     case 'SET_STOCK_COUNTS':       return { ...state, stockCounts: action.payload };
     case 'SET_POS_API_URL':        return { ...state, posApiUrl: action.payload };
     case 'SET_AVAILABILITY_LOG':   return { ...state, availabilityLog: action.payload };
+    case 'SET_PRICE_LOG':          return { ...state, priceLog: action.payload };
     case 'SET_ROLE':               return { ...state, currentRole: action.payload };
     case 'SET_TAB':                return { ...state, activeTab: action.payload };
     case 'ADD_NOTIFICATION':
@@ -113,6 +115,7 @@ export function AppProvider({ children }) {
   useEffect(() => { storage.set('stockCounts',       state.stockCounts);       }, [state.stockCounts]);
   useEffect(() => { storage.set('posApiUrl',         state.posApiUrl);         }, [state.posApiUrl]);
   useEffect(() => { storage.set('availabilityLog',   state.availabilityLog);   }, [state.availabilityLog]);
+  useEffect(() => { storage.set('priceLog',          state.priceLog);           }, [state.priceLog]);
   useEffect(() => { storage.set('currentRole',       state.currentRole);       }, [state.currentRole]);
 
   const notify = useCallback((message, type = 'success') => {
@@ -465,6 +468,26 @@ export function AppProvider({ children }) {
   }, []);
 
   /**
+   * Log a supplier price update.
+   * items: [{ catalogueId, productName, unitPrice, currency, unit }]
+   * source: 'manual' | 'paste' | 'file' | 'web_scrape'
+   */
+  const logPriceUpdate = useCallback(({ supplier, items, recordedBy, source = 'manual', notes = '' }) => {
+    const entry = {
+      id: `price_${Date.now()}`,
+      supplier,
+      date: new Date().toISOString(),
+      recordedBy: recordedBy || 'Unknown',
+      source,
+      notes,
+      items,
+    };
+    const updated = [entry, ...state.priceLog].slice(0, 500);
+    dispatch({ type: 'SET_PRICE_LOG', payload: updated });
+    notify(`${items.length} price${items.length !== 1 ? 's' : ''} logged for ${supplier}.`, 'success');
+  }, [state.priceLog, notify]);
+
+  /**
    * Log a supplier availability check-in.
    * checks: [{ productId, productName, status: 'in_stock'|'out_of_stock'|'low_stock', notes }]
    * source: 'manual' | 'paste' | 'url'
@@ -529,6 +552,8 @@ export function AppProvider({ children }) {
     setPosApiUrl,
     // Availability monitoring
     logAvailabilityCheck,
+    // Price intelligence
+    logPriceUpdate,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

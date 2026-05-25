@@ -3,7 +3,8 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { PRODUCTS } from '../data/seedData';
 import CatalogueImportModal from '../components/CatalogueImportModal';
-import { timeAgo } from '../utils/formatter';
+import { timeAgo, formatCurrency } from '../utils/formatter';
+import PriceUpdateModal from '../components/PriceUpdateModal';
 
 // ── Availability check-in modal ───────────────────────────────────────────────
 const STATUS_OPTS = [
@@ -502,7 +503,7 @@ function SupplierForm({ initial, isNew, onSubmit, onCancel }) {
 }
 
 export default function Suppliers() {
-  const { suppliers, products, addSupplier, updateSupplier, deleteSupplier, addCatalogueItem, deleteCatalogueItem, notify, availabilityLog, logAvailabilityCheck } = useApp();
+  const { suppliers, products, addSupplier, updateSupplier, deleteSupplier, addCatalogueItem, deleteCatalogueItem, notify, availabilityLog, logAvailabilityCheck, priceLog, logPriceUpdate } = useApp();
   const { currentUser } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null); // { name, details }
@@ -512,6 +513,7 @@ export default function Suppliers() {
   const [activeTab, setActiveTab] = useState({}); // { [supplierName]: 'details' | 'catalogue' | 'availability' }
   const [importModal, setImportModal] = useState({ open: false, supplierName: null });
   const [showCheckinModal, setShowCheckinModal] = useState(null); // supplierName | null
+  const [showPriceModal, setShowPriceModal]     = useState(null); // supplierName | null
 
   // Last-checked date per supplier (derived from availabilityLog)
   const lastCheckedBySupplier = useMemo(() => {
@@ -523,6 +525,32 @@ export default function Suppliers() {
     }
     return map;
   }, [availabilityLog]);
+
+  // Latest price per supplier → catalogueId → { price, date, source }
+  const latestPricesBySupplier = useMemo(() => {
+    const sup = {};
+    for (const entry of (priceLog || [])) {
+      if (!sup[entry.supplier]) sup[entry.supplier] = {};
+      for (const item of (entry.items || [])) {
+        const ex = sup[entry.supplier][item.catalogueId];
+        if (!ex || new Date(entry.date) > new Date(ex.date)) {
+          sup[entry.supplier][item.catalogueId] = { price: item.unitPrice, date: entry.date, source: entry.source };
+        }
+      }
+    }
+    return sup;
+  }, [priceLog]);
+
+  // Last price-logged date per supplier
+  const lastPricedBySupplier = useMemo(() => {
+    const map = {};
+    for (const entry of (priceLog || [])) {
+      if (!map[entry.supplier] || new Date(entry.date) > new Date(map[entry.supplier])) {
+        map[entry.supplier] = entry.date;
+      }
+    }
+    return map;
+  }, [priceLog]);
 
   const canManage = currentUser?.role === 'admin' || currentUser?.role === 'procurement_manager';
 
@@ -715,20 +743,24 @@ export default function Suppliers() {
                     const lc = lastCheckedBySupplier[name];
                     if (!lc) return (
                       <span className="text-xs bg-red-50 text-red-500 px-2.5 py-1 rounded-full font-medium">
-                        ⚠ never checked
+                        ⚠ stock never checked
                       </span>
                     );
                     const daysSince = Math.floor((Date.now() - new Date(lc)) / 86400000);
-                    const cls = daysSince <= 7
-                      ? 'bg-green-50 text-green-700'
-                      : daysSince <= 30
-                        ? 'bg-amber-50 text-amber-600'
-                        : 'bg-red-50 text-red-500';
-                    return (
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${cls}`}>
-                        ✓ {timeAgo(lc)}
+                    const cls = daysSince <= 7 ? 'bg-green-50 text-green-700' : daysSince <= 30 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-500';
+                    return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${cls}`}>✓ stock {timeAgo(lc)}</span>;
+                  })()}
+                  {/* Last-priced badge */}
+                  {(() => {
+                    const lp = lastPricedBySupplier[name];
+                    if (!lp) return (
+                      <span className="text-xs bg-amber-50 text-amber-600 px-2.5 py-1 rounded-full font-medium">
+                        💰 no prices
                       </span>
                     );
+                    const daysSince = Math.floor((Date.now() - new Date(lp)) / 86400000);
+                    const cls = daysSince <= 14 ? 'bg-green-50 text-green-700' : daysSince <= 60 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-500';
+                    return <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${cls}`}>💰 {timeAgo(lp)}</span>;
                   })()}
                 </div>
 
@@ -750,6 +782,13 @@ export default function Suppliers() {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={e => { e.stopPropagation(); setShowPriceModal(name); }}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 font-medium flex items-center gap-1"
+                    title="Log price update for this supplier"
+                  >
+                    💰 Prices
+                  </button>
                   <button
                     onClick={e => { e.stopPropagation(); setShowCheckinModal(name); }}
                     className="text-xs px-3 py-1.5 rounded-lg border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 font-medium flex items-center gap-1"
@@ -786,10 +825,11 @@ export default function Suppliers() {
                     <>
                       {/* Tab bar */}
                       <div className="flex gap-0 border-b border-gray-100 px-5">
-                        {['Details', 'Catalogue', 'Availability'].map(tab => {
+                        {['Details', 'Catalogue', 'Availability', 'Prices'].map(tab => {
                           const tabKey = tab.toLowerCase();
                           const isActive = (activeTab[name] || 'details') === tabKey;
                           const supplyLogs = (availabilityLog || []).filter(e => e.supplier === name);
+                          const priceLogs  = (priceLog || []).filter(e => e.supplier === name);
                           return (
                             <button
                               key={tab}
@@ -807,6 +847,11 @@ export default function Suppliers() {
                               {tab === 'Availability' && supplyLogs.length > 0 && (
                                 <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-500'}`}>
                                   {supplyLogs.length}
+                                </span>
+                              )}
+                              {tab === 'Prices' && priceLogs.length > 0 && (
+                                <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${isActive ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {priceLogs.length}
                                 </span>
                               )}
                             </button>
@@ -951,6 +996,141 @@ export default function Suppliers() {
                             </div>
                           );
                         })()}
+                        {(activeTab[name] || 'details') === 'prices' && (() => {
+                          const supPriceLogs = (priceLog || [])
+                            .filter(e => e.supplier === name)
+                            .sort((a, b) => new Date(b.date) - new Date(a.date));
+                          const latestPrices = latestPricesBySupplier[name] || {};
+                          const catalogue = details.catalogue || [];
+                          const pricedItems = catalogue.filter(i => latestPrices[i.id]);
+
+                          return (
+                            <div className="space-y-4">
+                              {/* Sub-header */}
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs text-gray-500">
+                                  {supPriceLogs.length === 0
+                                    ? 'No price updates logged yet.'
+                                    : `${supPriceLogs.length} update${supPriceLogs.length !== 1 ? 's' : ''} · Last ${timeAgo(supPriceLogs[0].date)}`}
+                                </p>
+                                <button
+                                  onClick={() => setShowPriceModal(name)}
+                                  className="px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 flex items-center gap-1.5"
+                                >
+                                  + Log Price Update
+                                </button>
+                              </div>
+
+                              {/* Latest prices summary table */}
+                              {pricedItems.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Current Price List</p>
+                                  <div className="bg-white border border-gray-100 rounded-lg overflow-hidden">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-100">
+                                          <th className="px-3 py-2 text-left text-gray-500 font-semibold">Product</th>
+                                          <th className="px-3 py-2 text-right text-gray-500 font-semibold">Unit Price</th>
+                                          <th className="px-3 py-2 text-right text-gray-500 font-semibold">Updated</th>
+                                          <th className="px-3 py-2 text-center text-gray-500 font-semibold">Source</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-50">
+                                        {pricedItems.map(item => {
+                                          const lp = latestPrices[item.id];
+                                          // Find previous price entry for change indicator
+                                          const prev = supPriceLogs.slice(1).flatMap(e => e.items || []).find(i => i.catalogueId === item.id);
+                                          const pct = prev ? Math.round(((lp.price - prev.unitPrice) / prev.unitPrice) * 100) : null;
+                                          return (
+                                            <tr key={item.id} className="hover:bg-gray-50">
+                                              <td className="px-3 py-2 text-gray-800 font-medium truncate max-w-[200px]">{item.name}</td>
+                                              <td className="px-3 py-2 text-right font-mono font-bold text-gray-900">
+                                                UGX {lp.price.toLocaleString()}
+                                                {pct !== null && pct !== 0 && (
+                                                  <span className={`ml-1.5 text-[10px] font-semibold ${pct > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                                    {pct > 0 ? '▲' : '▼'}{Math.abs(pct)}%
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 text-right text-gray-400">{timeAgo(lp.date)}</td>
+                                              <td className="px-3 py-2 text-center">
+                                                <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${
+                                                  lp.source === 'paste' ? 'bg-blue-50 text-blue-600' :
+                                                  lp.source === 'file' ? 'bg-purple-50 text-purple-600' :
+                                                  lp.source === 'web_scrape' ? 'bg-teal-50 text-teal-600' :
+                                                  'bg-gray-100 text-gray-500'
+                                                }`}>
+                                                  {lp.source === 'paste' ? 'paste' : lp.source === 'file' ? 'file' : lp.source === 'web_scrape' ? 'web' : 'phone'}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Price log history */}
+                              {supPriceLogs.length === 0 ? (
+                                <div className="py-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                  <p className="text-3xl mb-2">💰</p>
+                                  <p className="text-sm font-medium text-gray-500">No price updates logged</p>
+                                  <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
+                                    Log prices from phone calls, WhatsApp, catalogues or web pages.
+                                  </p>
+                                  <button
+                                    onClick={() => setShowPriceModal(name)}
+                                    className="mt-3 px-4 py-2 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700"
+                                  >
+                                    Log First Price Update
+                                  </button>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Price History</p>
+                                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                    {supPriceLogs.map(entry => (
+                                      <div key={entry.id} className="bg-white border border-gray-100 rounded-lg px-3 py-2.5">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-xs font-semibold text-gray-800">
+                                              {new Date(entry.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400">{timeAgo(entry.date)}</span>
+                                            <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${
+                                              entry.source === 'paste' ? 'bg-blue-50 text-blue-600' :
+                                              entry.source === 'file' ? 'bg-purple-50 text-purple-600' :
+                                              entry.source === 'web_scrape' ? 'bg-teal-50 text-teal-600' :
+                                              'bg-gray-100 text-gray-500'
+                                            }`}>
+                                              {entry.source === 'paste' ? '💬 paste' : entry.source === 'file' ? '📎 file' : entry.source === 'web_scrape' ? '🌐 web' : '📞 phone'}
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] text-gray-400">{(entry.items || []).length} prices · by {entry.recordedBy}</span>
+                                        </div>
+                                        {entry.notes && (
+                                          <p className="text-[10px] text-gray-400 italic mb-1">{entry.notes}</p>
+                                        )}
+                                        <div className="flex flex-wrap gap-1">
+                                          {(entry.items || []).slice(0, 5).map(item => (
+                                            <span key={item.catalogueId} className="text-[10px] bg-amber-50 text-amber-700 rounded px-1.5 py-0.5 font-mono">
+                                              {item.productName.split(' ').slice(0, 3).join(' ')} — UGX {item.unitPrice.toLocaleString()}
+                                            </span>
+                                          ))}
+                                          {(entry.items || []).length > 5 && (
+                                            <span className="text-[10px] text-gray-400">+{entry.items.length - 5} more</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </>
                   )}
@@ -969,6 +1149,18 @@ export default function Suppliers() {
           currentUser={currentUser}
           onSave={logAvailabilityCheck}
           onClose={() => setShowCheckinModal(null)}
+        />
+      )}
+
+      {/* Price update modal */}
+      {showPriceModal && (
+        <PriceUpdateModal
+          supplierName={showPriceModal}
+          catalogue={(suppliers[showPriceModal]?.catalogue) || []}
+          currentUser={currentUser}
+          latestPrices={latestPricesBySupplier[showPriceModal] || {}}
+          onSave={logPriceUpdate}
+          onClose={() => setShowPriceModal(null)}
         />
       )}
 
