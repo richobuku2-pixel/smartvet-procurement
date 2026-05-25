@@ -4,7 +4,7 @@
  * All 11 sections · 60+ products · Poultry, Canine, Large Animal, Equipment
  */
 
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 // ─── Colour palette ──────────────────────────────────────────────────────────
 const C = {
