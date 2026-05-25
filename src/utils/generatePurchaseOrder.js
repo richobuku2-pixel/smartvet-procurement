@@ -39,7 +39,7 @@ export const SUPPLIER = {
 
 export const BUYER = {
   name:    'SmartVet Africa',
-  address: 'Dark Store — Gulu, Northern Uganda',
+  address: 'Dispatch Warehouse, Plot 75, Jomo Kenyatta Road, Elephante Commons, Gulu City',
   contact: 'Richard Obuku',
   web:     'smartvetafrica.com',
 };
@@ -764,7 +764,7 @@ export function generatePurchaseOrder({
   row++;
 
   rowHeights[row] = 20;
-  mergedCell(0, row, 8, row, { t: 's', v: '  NOTES TO GLOBAL VET: Please confirm stock availability, note any substitutions or out-of-stock items, and advise on cold chain handling for vaccines on delivery to Gulu, Northern Uganda.', s: { fill: fill('F5F5F5'), font: font(false, '444444', 8), alignment: align('left', 'center', true) } });
+  mergedCell(0, row, 8, row, { t: 's', v: '  NOTES TO GLOBAL VET: Please confirm stock availability, note any substitutions or out-of-stock items, and advise on cold chain handling for vaccines on delivery to Gulu City, Uganda.', s: { fill: fill('F5F5F5'), font: font(false, '444444', 8), alignment: align('left', 'center', true) } });
   row++;
 
   rowHeights[row] = 13;

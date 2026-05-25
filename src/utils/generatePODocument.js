@@ -16,7 +16,8 @@ import * as XLSX from 'xlsx-js-style';
 export const BUYER = {
   name:    'SmartVet Africa',
   tagline: 'Animal Health meets Innovation',
-  address: 'Dark Store — Gulu, Northern Uganda',
+  address: 'Dispatch Warehouse, Plot 75, Jomo Kenyatta Road, Elephante Commons, Gulu City',
+  pobox:   'P. O. Box 361968, Gulu',
   contact: 'Richard Obuku',
   email:   'hello@smartvet.africa',
   web:     'smartvetafrica.com',
@@ -174,7 +175,7 @@ export function generateExcelPO({ orderNo, orderDate, supplier, supplierDetails 
     [BUYER.address,                              'ORDER DATE:',     orderDate || new Date().toLocaleDateString('en-GB')],
     [`Contact: ${BUYER.contact}`,                'PAYMENT TERMS:',  paymentTerms],
     [`${BUYER.email}  ·  ${BUYER.web}`,          'CURRENCY:',       'Uganda Shillings (UGX)'],
-    ['Gulu, Northern Uganda  ·  East Africa',    'REQUIRED BY:',    'To be confirmed'],
+    [`${BUYER.pobox}  ·  Gulu City, Uganda`,     'REQUIRED BY:',    'To be confirmed'],
   ];
   for (let i = 0; i < infoRows.length; i++) {
     const r = 5 + i;
