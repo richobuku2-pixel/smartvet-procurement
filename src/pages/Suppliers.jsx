@@ -23,10 +23,15 @@ function AvailabilityCheckinModal({ supplierName, catalogue, currentUser, onSave
   const [pasteText, setPasteText]     = useState('');
   const [parsedItems, setParsedItems] = useState(null);
   const [urlInput, setUrlInput]       = useState('');
+  const [aiParsing, setAiParsing]     = useState(false);
+  const [aiError, setAiError]         = useState('');
+  const [parseSource, setParseSource] = useState(''); // 'regex' | 'ai'
 
   const setStatus = (id, val) => setStatuses(p => ({ ...p, [id]: val }));
 
   const parsePaste = () => {
+    setParseSource('regex');
+    setAiError('');
     const lines = pasteText.split('\n').filter(l => l.trim());
     const parsed = [];
     for (const item of catalogue) {
@@ -43,6 +48,39 @@ function AvailabilityCheckinModal({ supplierName, catalogue, currentUser, onSave
       parsed.push({ id: item.id, name: item.name, status, matchLine });
     }
     setParsedItems(parsed);
+  };
+
+  const handleAiParse = async () => {
+    setAiParsing(true);
+    setAiError('');
+    setParseSource('ai');
+    setParsedItems(null);
+    try {
+      const res = await fetch('/api/parse-prices-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: pasteText,
+          catalogue: catalogue.map(i => ({ id: i.id, name: i.name, unit: i.unit })),
+          mode: 'availability',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setAiError(data.error || 'AI parse failed');
+        setAiParsing(false);
+        return;
+      }
+      const mapped = (data.items || []).map(item => {
+        const cat = catalogue.find(c => c.id === item.productId);
+        if (!cat) return null;
+        return { id: cat.id, name: cat.name, status: item.status || 'in_stock', matchLine: '🤖 AI matched' };
+      }).filter(Boolean);
+      setParsedItems(mapped);
+    } catch (err) {
+      setAiError(err.message);
+    }
+    setAiParsing(false);
   };
 
   const handleSave = () => {
@@ -149,18 +187,45 @@ function AvailabilityCheckinModal({ supplierName, catalogue, currentUser, onSave
               <p className="text-xs text-gray-500">Paste a price list, email, or WhatsApp availability update. SmartVet will scan for known product names and infer their status.</p>
               <textarea
                 value={pasteText}
-                onChange={e => { setPasteText(e.target.value); setParsedItems(null); }}
+                onChange={e => { setPasteText(e.target.value); setParsedItems(null); setAiError(''); setParseSource(''); }}
                 placeholder={"Paste price list or availability update here...\n\nExample:\nNewcastle Vaccine — In Stock — UGX 85,000\nGumboro Live — Out of Stock\nAmprolium 20% — Limited stock, 50 units left"}
                 rows={7}
                 className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono resize-none"
               />
-              <button
-                onClick={parsePaste}
-                disabled={!pasteText.trim()}
-                className="px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50"
-              >
-                🔍 Parse &amp; Preview
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={parsePaste}
+                  disabled={!pasteText.trim()}
+                  className="px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                >
+                  🔍 Regex Parse
+                </button>
+                <button
+                  onClick={handleAiParse}
+                  disabled={!pasteText.trim() || aiParsing}
+                  className="px-4 py-2 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {aiParsing ? (
+                    <><span className="animate-spin inline-block text-sm">⟳</span> Parsing…</>
+                  ) : (
+                    '🤖 AI Parse'
+                  )}
+                </button>
+                {parseSource && parsedItems !== null && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${parseSource === 'ai' ? 'bg-violet-50 text-violet-600' : 'bg-teal-50 text-teal-600'}`}>
+                    {parseSource === 'ai' ? '🤖 Gemini 2.0 Flash' : '🔍 Regex'}
+                  </span>
+                )}
+              </div>
+              {aiError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+                  <p className="font-semibold">AI Parse Error</p>
+                  <p>{aiError}</p>
+                  {aiError.includes('GEMINI_API_KEY') && (
+                    <p className="mt-1 text-red-500">Add <code className="bg-red-100 px-1 rounded">GEMINI_API_KEY=your_key</code> to your <code>.env</code> file.</p>
+                  )}
+                </div>
+              )}
               {parsedItems !== null && (
                 <div className="bg-gray-50 rounded-lg p-3 space-y-1">
                   <p className="text-xs font-semibold text-gray-600 mb-2">

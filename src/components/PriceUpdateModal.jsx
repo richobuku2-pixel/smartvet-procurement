@@ -294,8 +294,55 @@ export default function PriceUpdateModal({ supplierName, catalogue, currentUser,
 
   const setManualPrice = (id, val) => setManualPrices(p => ({ ...p, [id]: val }));
 
-  // Parse paste
-  const handleParsePaste = () => setParsedPaste(parsePriceText(pasteText, catalogue));
+  // AI parsing state
+  const [aiParsing, setAiParsing]   = useState(false);
+  const [aiError, setAiError]       = useState('');
+  const [parseSource, setParseSource] = useState(''); // 'regex' | 'ai'
+
+  // Regex parse (default)
+  const handleParsePaste = () => {
+    setAiError('');
+    setParseSource('regex');
+    setParsedPaste(parsePriceText(pasteText, catalogue));
+  };
+
+  // Gemini AI parse
+  const handleAiParse = async () => {
+    if (!pasteText.trim()) return;
+    setAiParsing(true);
+    setAiError('');
+    setParseSource('ai');
+    try {
+      const res = await fetch('/api/parse-prices-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: pasteText,
+          catalogue: catalogue.map(i => ({ id: i.id, name: i.name, unit: i.unit })),
+          mode: 'price',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { setAiError(data.error || 'AI parse failed'); setAiParsing(false); return; }
+      // Map AI response to ParsePreview format
+      const mapped = (data.items || []).map(item => {
+        const cat = catalogue.find(c => c.id === item.catalogueId);
+        return cat ? {
+          catalogueId: item.catalogueId,
+          productName: cat.name,
+          unitPrice: Number(item.unitPrice),
+          unit: cat.unit || '',
+          matchLine: '🤖 AI matched',
+          score: 1,
+        } : null;
+      }).filter(Boolean);
+      if (!mapped.length && data.warning) setAiError(data.warning);
+      setParsedPaste(mapped);
+    } catch (err) {
+      setAiError(err.message);
+    }
+    setAiParsing(false);
+  };
 
   // File upload
   const handleFile = async (file) => {
@@ -461,22 +508,51 @@ export default function PriceUpdateModal({ supplierName, catalogue, currentUser,
           {tier === 'paste' && (
             <>
               <p className="text-xs text-gray-500">
-                Paste a WhatsApp message, email, or plain text price list. SmartVet matches product names and extracts UGX amounts automatically.
+                Paste a WhatsApp message, email, or plain text price list.
+                Use <strong>Regex</strong> for structured lists, <strong>AI</strong> for free-form natural language.
               </p>
               <textarea
                 value={pasteText}
-                onChange={e => { setPasteText(e.target.value); setParsedPaste(null); }}
-                placeholder={"Paste here...\n\nExample:\nNewcastle Vaccine (I2) — UGX 85,000\nGumboro Live 100,000/=\nEnrofloxacin 10% — Shs. 45,000\nAmprolium 20% 90,000 per ltr\nGlucovit — 35,000/bottle"}
+                onChange={e => { setPasteText(e.target.value); setParsedPaste(null); setAiError(''); }}
+                placeholder={"Paste any supplier text here...\n\nStructured:\n  NCD\n  1000DS @6500\n  500DS @5500\n\nFree-form:\n  'NCD and gumboro tight this week, fowl pox completely gone, prices going up'"}
                 rows={7}
                 className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono resize-none"
               />
-              <button
-                onClick={handleParsePaste}
-                disabled={!pasteText.trim()}
-                className="px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50"
-              >
-                🔍 Parse &amp; Preview
-              </button>
+              {/* Parse buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleParsePaste}
+                  disabled={!pasteText.trim() || aiParsing}
+                  className="px-4 py-2 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  🔍 Regex Parse
+                </button>
+                <button
+                  onClick={handleAiParse}
+                  disabled={!pasteText.trim() || aiParsing}
+                  className="px-4 py-2 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {aiParsing ? (
+                    <><span className="animate-spin inline-block">⟳</span> Asking Gemini…</>
+                  ) : (
+                    <>🤖 AI Parse</>
+                  )}
+                </button>
+                {parsedPaste !== null && (
+                  <span className="text-[10px] text-gray-400 ml-auto">
+                    {parseSource === 'ai' ? '🤖 Gemini 2.0 Flash' : '🔍 Regex'} · {parsedPaste.length} match{parsedPaste.length !== 1 ? 'es' : ''}
+                  </span>
+                )}
+              </div>
+              {/* AI error */}
+              {aiError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+                  ⚠ {aiError}
+                  {aiError.includes('GEMINI_API_KEY') && (
+                    <p className="mt-1 text-red-500">Add <code className="bg-red-100 px-1 rounded">GEMINI_API_KEY=your_key</code> to your <code>.env</code> file and Vercel environment variables.</p>
+                  )}
+                </div>
+              )}
               {parsedPaste !== null && (
                 <ParsePreview results={parsedPaste} latestPrices={latestPrices}
                   onEdit={(id, price) => setParsedPaste(p => p.map(i => i.catalogueId === id ? { ...i, unitPrice: price } : i))} />

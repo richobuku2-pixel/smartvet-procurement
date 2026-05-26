@@ -14,6 +14,46 @@ export default defineConfig(({ mode }) => {
       {
         name: 'smartvet-email-api',
         configureServer(server) {
+          // ── Gemini AI price/availability parser ───────────────────────────
+          server.middlewares.use('/api/parse-prices-ai', async (req, res) => {
+            res.setHeader('Content-Type', 'application/json');
+            if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method not allowed' })); return; }
+
+            const apiKey = env.GEMINI_API_KEY;
+            if (!apiKey) { res.statusCode = 500; res.end(JSON.stringify({ error: 'GEMINI_API_KEY not set in .env' })); return; }
+
+            let raw = '';
+            for await (const chunk of req) raw += chunk;
+            let body;
+            try { body = JSON.parse(raw); } catch { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid JSON' })); return; }
+
+            const { text, catalogue, mode = 'price' } = body;
+            if (!text?.trim() || !catalogue?.length) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Missing text or catalogue' })); return; }
+
+            const catalogueList = catalogue.map(i => `  ID:"${i.id}"  Name:"${i.name}"${i.unit ? `  Unit:${i.unit}` : ''}`).join('\n');
+
+            const prompt = mode === 'price'
+              ? `You are a price extraction assistant for SmartVet Africa, Uganda. Currency: UGX.\n\nCATALOGUE:\n${catalogueList}\n\nSUPPLIER TEXT:\n${text}\n\nINSTRUCTIONS:\n- Category on one line + dose+price below = "CATEGORY DOSE" product. E.g. "NCD" then "1000DS @6500" = "NCD 1000DS" at 6500.\n- Use first price when two appear ("@6500 and 15,000" → 6500).\n- Return prices as plain integers. Only confident matches.\n\nReturn ONLY a JSON array:\n[{"catalogueId":"...","productName":"...","unitPrice":6500}]`
+              : `You are an availability assistant for SmartVet Africa, Uganda.\n\nCATALOGUE:\n${catalogueList}\n\nSUPPLIER TEXT:\n${text}\n\nINSTRUCTIONS:\n- Status: exactly "in_stock", "low_stock", or "out_of_stock".\n- tight/limited/few = low_stock. finished/out/nil = out_of_stock.\n- Only explicitly mentioned products.\n\nReturn ONLY a JSON array:\n[{"productId":"...","productName":"...","status":"in_stock"}]`;
+
+            try {
+              const gRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }),
+                  signal: AbortSignal.timeout(20000) }
+              );
+              if (!gRes.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: `Gemini ${gRes.status}` })); return; }
+              const data = await gRes.json();
+              const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              const jsonMatch = rawText.match(/\[[\s\S]*?\]/);
+              const items = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+              res.statusCode = 200; res.end(JSON.stringify({ ok: true, items, model: 'gemini-2.0-flash', mode }));
+            } catch (err) {
+              res.statusCode = 500; res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+
           // ── Price scraper proxy ────────────────────────────────────────────
           server.middlewares.use('/api/scrape-prices', async (req, res) => {
             res.setHeader('Content-Type', 'application/json');
