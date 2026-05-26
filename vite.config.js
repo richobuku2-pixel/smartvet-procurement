@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
 
             try {
               const gRes = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }),
                   signal: AbortSignal.timeout(20000) }
@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
               const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
               const jsonMatch = rawText.match(/\[[\s\S]*?\]/);
               const items = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-              res.statusCode = 200; res.end(JSON.stringify({ ok: true, items, model: 'gemini-2.0-flash', mode }));
+              res.statusCode = 200; res.end(JSON.stringify({ ok: true, items, model: 'gemini-1.5-flash', mode }));
             } catch (err) {
               res.statusCode = 500; res.end(JSON.stringify({ error: err.message }));
             }
