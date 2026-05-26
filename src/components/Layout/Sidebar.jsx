@@ -1,24 +1,33 @@
+import { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { getMarketIntelligence } from '../../utils/marketIntelligence';
 
 const TABS = [
-  { id: 'dashboard',         label: 'Dashboard',        icon: '🏠' },
-  { id: 'inventory',         label: 'Inventory',        icon: '📦' },
-  { id: 'orders',            label: 'Orders',           icon: '🧾' },
-  { id: 'approvals',         label: 'Approvals',        icon: '✅' },
-  { id: 'suppliers',         label: 'Suppliers',        icon: '🏭' },
-  { id: 'supplier-accounts', label: 'Supplier Accounts',icon: '💼' },
-  { id: 'reports',           label: 'Reports',          icon: '📊' },
-  { id: 'network',           label: 'Store Network',    icon: '🏪' },
+  { id: 'dashboard',           label: 'Dashboard',          icon: '🏠' },
+  { id: 'inventory',           label: 'Inventory',          icon: '📦' },
+  { id: 'orders',              label: 'Orders',             icon: '🧾' },
+  { id: 'approvals',           label: 'Approvals',          icon: '✅' },
+  { id: 'suppliers',           label: 'Suppliers',          icon: '🏭' },
+  { id: 'supplier-accounts',   label: 'Supplier Accounts',  icon: '💼' },
+  { id: 'market-intelligence', label: 'Market Intelligence',icon: '🧠' },
+  { id: 'reports',             label: 'Reports',            icon: '📊' },
+  { id: 'network',             label: 'Store Network',      icon: '🏪' },
 ];
 
 export default function Sidebar() {
-  const { activeTab, orders, transferOrders, dispatch } = useApp();
+  const { activeTab, orders, transferOrders, availabilityLog, priceLog, suppliers, dispatch } = useApp();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const pendingApprovals = orders.filter(o => o.status === 'pending_procurement' || o.status === 'pending_accounts').length;
   const draftCount = orders.filter(o => o.status === 'draft').length;
   const pendingTransfers = transferOrders.filter(t => t.status === 'pending').length;
+
+  // Market intelligence alert badge — count critical + at-risk items
+  const intelAlerts = useMemo(() => {
+    const { counts } = getMarketIntelligence(availabilityLog, priceLog, suppliers);
+    return (counts.critical || 0) + (counts.at_risk || 0);
+  }, [availabilityLog, priceLog, suppliers]);
 
   return (
     <aside className="w-56 bg-white border-r border-gray-200 flex flex-col py-3 shadow-sm">
@@ -30,6 +39,7 @@ export default function Sidebar() {
         const badge = tab.id === 'approvals' && pendingApprovals > 0 ? pendingApprovals
           : tab.id === 'orders' && draftCount > 0 ? draftCount
           : tab.id === 'network' && pendingTransfers > 0 ? pendingTransfers
+          : tab.id === 'market-intelligence' && intelAlerts > 0 ? intelAlerts
           : null;
 
         return (

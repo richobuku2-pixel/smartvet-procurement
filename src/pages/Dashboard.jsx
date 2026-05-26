@@ -6,10 +6,11 @@ import EmailPreviewModal from '../components/EmailPreviewModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { formatCurrency, formatDate, formatDaysAgo, daysUntil } from '../utils/formatter';
 import { calculateSupplierBalance } from '../utils/calculations';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { getMarketIntelligence, RISK_META } from '../utils/marketIntelligence';
 
 export default function Dashboard() {
-  const { orders, supplierAccounts, suppliers, dispatch, updateOrderStatus, sendOrderEmail, hasPermission, notify } = useApp();
+  const { orders, supplierAccounts, suppliers, availabilityLog, priceLog, dispatch, updateOrderStatus, sendOrderEmail, hasPermission, notify } = useApp();
   const { currentUser } = useAuth();
   const [emailOrder, setEmailOrder] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -69,6 +70,65 @@ export default function Dashboard() {
         <MetricCard title="Orders Sent" value={sentOrders.length} subtitle="Awaiting delivery" color="primary" />
         <MetricCard title="Outstanding Balance" value={formatCurrency(totalOutstanding)} subtitle="Total owed to suppliers" color="danger" onClick={() => dispatch({ type: 'SET_TAB', payload: 'supplier-accounts' })} />
       </div>
+
+      {/* Market Intelligence Alerts */}
+      {(() => {
+        const { products, counts, systemicShortages } = getMarketIntelligence(availabilityLog, priceLog, suppliers);
+        const alerts = products.filter(p => p.risk.level === 'critical' || p.risk.level === 'at_risk').slice(0, 5);
+        if (!alerts.length && !systemicShortages.length) return null;
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                  🧠 Market Intelligence Alerts
+                  {(counts.critical || 0) > 0 && (
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">{counts.critical} Critical</span>
+                  )}
+                  {(counts.at_risk || 0) > 0 && (
+                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">{counts.at_risk} At Risk</span>
+                  )}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">Predictive availability signals from check-in history &amp; price trends</p>
+              </div>
+              <button
+                onClick={() => dispatch({ type: 'SET_TAB', payload: 'market-intelligence' })}
+                className="text-xs text-teal-700 hover:text-teal-900 font-semibold px-3 py-1.5 border border-teal-200 rounded-lg hover:bg-teal-50"
+              >
+                Full Dashboard →
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {systemicShortages.slice(0, 2).map((s, i) => (
+                <div key={`sys-${i}`} className="flex items-center gap-3 px-5 py-3 bg-red-50/40">
+                  <span className="text-base">🚨</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{s.productName}</p>
+                    <p className="text-xs text-gray-500">Market-wide — low/OOS at {s.affectedSuppliers.length} suppliers simultaneously</p>
+                  </div>
+                  <span className="text-[10px] font-bold bg-red-200 text-red-800 px-2 py-0.5 rounded-full flex-shrink-0">Systemic</span>
+                </div>
+              ))}
+              {alerts.map(p => {
+                const m = RISK_META[p.risk.level];
+                return (
+                  <div key={p.key} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
+                    <span className="text-base">{m.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{p.item.name}</p>
+                      <p className="text-xs text-gray-400">{p.supplierName} · {p.risk.flags.map(f => f.label).join(' · ') || m.label}</p>
+                    </div>
+                    {p.forecast && p.forecast.direction === 'worsening' && (
+                      <span className="text-[10px] text-red-600 font-semibold flex-shrink-0">↓ 30d</span>
+                    )}
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${m.badge}`}>{m.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Admin Quick Actions */}
       {(currentUser?.role === 'admin' || hasPermission('approve_procurement')) && (
