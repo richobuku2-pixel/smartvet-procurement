@@ -25,45 +25,139 @@ const STOPWORDS = new Set([
 
 function tokenise(str) {
   return (str || '').toLowerCase()
-    .replace(/[^a-z0-9%\s]/g, ' ')
+    .replace(/[^a-z0-9+%\s]/g, ' ')   // keep + so NCD+IB stays distinct
     .split(/\s+/)
-    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+    .filter(w => w.length >= 2 && !STOPWORDS.has(w));
 }
 
+/**
+ * Extract a price from a line.
+ * Priority order ensures "@6500" beats "1000DS" (dose count).
+ */
 function extractPrice(line) {
-  // Patterns tried in order of specificity:
   const patterns = [
+    /@\s*([\d,]+)/,                       // @6500  ← highest priority (explicit marker)
     /ugx\s*([\d,]+)/i,                    // UGX 85,000
-    /shs?\.?\s*([\d,]+)/i,                // Shs 85,000  /  Sh.85000
+    /shs?\.?\s*([\d,]+)/i,               // Shs 85,000 / Sh.85000
     /([\d,]+)\s*\/=/,                     // 85,000/=
     /([\d,]+)\s*ugx/i,                    // 85000 UGX
-    /(?<![.\d])([\d,]{4,})(?![.\d%])/,   // bare 4+ digit number (no decimals/percents)
+    /(?<![.\d])([\d,]{4,})(?![.\d%])/,  // bare 4+ digit number (fallback)
   ];
   for (const pat of patterns) {
     const m = line.match(pat);
     if (m) {
       const raw = m[1].replace(/,/g, '');
-      // Handle shorthand: "85K" → 85000
-      const n = raw.endsWith('k') || raw.endsWith('K')
+      const n = raw.toLowerCase().endsWith('k')
         ? parseFloat(raw) * 1000
         : parseInt(raw, 10);
-      if (n >= 500 && n <= 100_000_000) return n; // UGX 500 → 100M sanity range
+      if (n >= 500 && n <= 100_000_000) return n;
     }
   }
   return null;
 }
 
-function parsePriceText(text, catalogue) {
+// Matches dose-size lines: "1000DS", "500 DS", "1000 Doses", "500dose"
+const DOSE_LINE_RE = /^(\d+(?:\.\d+)?)\s*(?:DS|dose[s]?)\b/i;
+
+/**
+ * Hierarchical parser — handles WhatsApp / phone-call format where the
+ * category name is on its own line followed by dose+price lines:
+ *
+ *   NCD                    ← category header (no price)
+ *   1000DS @6500           ← dose line  →  combined: "NCD 1000DS" @ 6500
+ *   500DS  @5500           ← dose line  →  combined: "NCD 500DS"  @ 5500
+ *   NCD+IB                 ← new category
+ *   1000DS @9500           ← combined: "NCD+IB 1000DS" @ 9500
+ *
+ * Returns null when the text doesn't fit this pattern (triggers flat fallback).
+ */
+function parseHierarchicalText(text, catalogue) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  let context = null;
+  const candidates = []; // { combinedName, price }
+
+  for (const line of lines) {
+    const doseMatch = line.match(DOSE_LINE_RE);
+    // For @ price: extract from the line directly (ignores the "and 15,000" second price)
+    const atPrice   = (() => {
+      const m = line.match(/@\s*([\d,]+)/);
+      if (!m) return null;
+      const n = parseInt(m[1].replace(/,/g, ''), 10);
+      return n >= 500 && n <= 100_000_000 ? n : null;
+    })();
+    // Strip dose prefix before bare-number extraction so "1000DS" isn't read as 1000
+    const priceFromLine = atPrice ?? extractPrice(line.replace(DOSE_LINE_RE, '').trim());
+
+    if (doseMatch && priceFromLine !== null) {
+      // Dose+price line — combine with current context
+      if (context) {
+        const doseStr = `${Math.round(parseFloat(doseMatch[1]))}DS`;
+        candidates.push({ combinedName: `${context} ${doseStr}`, price: priceFromLine, line });
+      }
+    } else if (!doseMatch && priceFromLine === null && line.length <= 50) {
+      // No dose, no price, short enough → treat as category header
+      context = line.trim();
+    }
+    // Lines with a price but no dose and no context: skip in hierarchical mode
+  }
+
+  if (!candidates.length) return null;
+
+  // Match each combined name to the catalogue
+  const results = [];
+  const used = new Set();
+  for (const { combinedName, price, line } of candidates) {
+    const cl = combinedName.toLowerCase();
+
+    // Strategy 1: exact case-insensitive match
+    let bestItem = catalogue.find(i => i.name.toLowerCase() === cl && !used.has(i.id));
+
+    // Strategy 2: one is a substring of the other (handles slight name variations)
+    if (!bestItem) {
+      bestItem = catalogue.find(i => !used.has(i.id) && (
+        cl.includes(i.name.toLowerCase()) || i.name.toLowerCase().includes(cl)
+      ));
+    }
+
+    // Strategy 3: token overlap fallback
+    if (!bestItem) {
+      const nameTokens = tokenise(combinedName);
+      let bestScore = 0;
+      for (const item of catalogue) {
+        if (used.has(item.id)) continue;
+        const itemTokens = tokenise(item.name);
+        const matches = nameTokens.filter(t => itemTokens.some(it => it === t || it.includes(t) || t.includes(it))).length;
+        const score = nameTokens.length ? matches / nameTokens.length : 0;
+        if (score > bestScore && score >= 0.4) { bestScore = score; bestItem = item; }
+      }
+    }
+
+    if (bestItem) {
+      used.add(bestItem.id);
+      results.push({
+        catalogueId: bestItem.id, productName: bestItem.name,
+        unitPrice: price, unit: bestItem.unit || '',
+        matchLine: `${combinedName} (from: "${line}")`, score: 1.0,
+      });
+    }
+  }
+
+  return results.length ? results : null;
+}
+
+/**
+ * Flat parser — original line-by-line keyword matching.
+ * Used when text doesn't follow the hierarchical category/dose format.
+ */
+function parsePriceTextFlat(text, catalogue) {
   const lines = text.split('\n').filter(l => l.trim());
   const results = [];
   for (const item of catalogue) {
     const itemTokens = tokenise(item.name);
     if (!itemTokens.length) continue;
-
     let bestLine = null, bestScore = 0;
     for (const line of lines) {
       const lineTokens = new Set(tokenise(line));
-      // Partial substring matching — "Newcastle" matches "newcastle" in line
       const matches = itemTokens.filter(t => [...lineTokens].some(lt => lt.includes(t) || t.includes(lt))).length;
       const score = matches / itemTokens.length;
       if (score > bestScore && score >= 0.35) { bestScore = score; bestLine = line; }
@@ -76,6 +170,15 @@ function parsePriceText(text, catalogue) {
     });
   }
   return results;
+}
+
+/**
+ * Main entry point — tries hierarchical first, falls back to flat.
+ */
+function parsePriceText(text, catalogue) {
+  const hierarchical = parseHierarchicalText(text, catalogue);
+  if (hierarchical) return hierarchical;
+  return parsePriceTextFlat(text, catalogue);
 }
 
 function parsePriceCSV(text, catalogue) {
