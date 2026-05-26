@@ -246,6 +246,10 @@ export function generateExcelPO({ orderNo, orderDate, supplier, supplierDetails 
   let rowIdx = 16;
   let lineNo  = 1;
 
+  // Track which Excel rows hold exempt vs standard-rated amounts (for SUM formulas)
+  const exemptAmtRows    = [];
+  const standardAmtRows  = [];
+
   for (const section of sections) {
     const sectionItems = items.filter(it => it.section === section && (it.qty || 0) > 0);
     if (!sectionItems.length) continue;
@@ -266,17 +270,26 @@ export function generateExcelPO({ orderNo, orderDate, supplier, supplierDetails 
 
       rowHeights[rowIdx] = 20;
 
+      // Amount formula: Qty × Unit Price — live in Excel
+      const hasValues = qty > 0 && price > 0;
+      const amtFormula = `E${rowIdx}*F${rowIdx}`;
+
       setCell(0, rowIdx, { t: 'n', v: lineNo++, s: { fill: fill(bg), font: font(false, 'AAAAAA', 8), alignment: align('center', 'center', false), border: bdr() } });
       setCell(1, rowIdx, { t: 's', v: item.name || '', s: { fill: fill(bg), font: font(true, C.dark, 9), alignment: align('left', 'center', true), border: bdr() } });
       setCell(2, rowIdx, { t: 's', v: item.spec || '', s: { fill: fill(bg), font: font(false, '777777', 8), alignment: align('left', 'center', true), border: bdr() } });
       setCell(3, rowIdx, { t: 's', v: item.unit || '', s: { fill: fill(bg), font: font(false, C.dark, 8), alignment: align('center', 'center', false), border: bdr() } });
       setCell(4, rowIdx, { t: 'n', v: qty, s: { fill: fill(C.greenLight), font: font(true, '1B5E20', 11), alignment: align('center', 'center', false), border: bdr() } });
-      setCell(5, rowIdx, { t: qty && price ? 'n' : 's', v: qty && price ? price : '', s: { fill: fill(bg), font: font(false, C.dark, 9), alignment: align('right', 'center', false), border: bdr() } });
-      setCell(6, rowIdx, { t: qty && price ? 'n' : 's', v: qty && price ? qty * price : '', s: { fill: fill(bg), font: font(true, C.dark, 9), alignment: align('right', 'center', false), border: bdr() } });
+      setCell(5, rowIdx, { t: hasValues ? 'n' : 's', v: hasValues ? price : '', s: { fill: fill(bg), font: font(false, C.dark, 9), alignment: align('right', 'center', false), border: bdr() } });
+      setCell(6, rowIdx, { t: 'n', v: hasValues ? qty * price : 0, f: amtFormula, s: { fill: fill(bg), font: font(true, C.dark, 9), alignment: align('right', 'center', false), border: bdr() } });
       setCell(7, rowIdx, {
         t: 's', v: isEquip ? '18% VAT' : 'Exempt',
         s: { fill: fill(isEquip ? C.amber : C.greenLight), font: font(false, isEquip ? C.amberDark : '1B5E20', 7), alignment: align('center', 'center', false), border: bdr() },
       });
+
+      if (hasValues) {
+        if (isEquip) standardAmtRows.push(rowIdx);
+        else         exemptAmtRows.push(rowIdx);
+      }
       rowIdx++;
     }
   }
@@ -288,27 +301,38 @@ export function generateExcelPO({ orderNo, orderDate, supplier, supplierDetails 
 
   const { exemptTotal, standardSubtotal, vat, grandTotal, hasExempt, hasStandard } = calcVATBreakdown(items);
 
-  const addTotRow = (label, value, bgCol, fgCol, bold = false, sz = 9) => {
+  // Build SUM formulas from tracked row numbers
+  const sumOf = rows => rows.length ? `SUM(${rows.map(r => `G${r}`).join(',')})` : '0';
+
+  let exemptTotRow = null;
+  let standardTotRow = null;
+  let vatRow = null;
+
+  const addTotRow = (label, value, formula, bgCol, fgCol, bold = false, sz = 9) => {
     rowHeights[rowIdx] = 18;
     mc(0, rowIdx, 5, rowIdx, {
       t: 's', v: label,
       s: { fill: fill(bgCol), font: font(bold, fgCol, sz), alignment: align('right', 'center', false), border: bdr() },
     });
-    setCell(6, rowIdx, { t: 'n', v: value, s: { fill: fill(bgCol), font: font(bold, fgCol, sz), alignment: align('right', 'center', false), border: bdr() } });
+    setCell(6, rowIdx, { t: 'n', v: value, f: formula, s: { fill: fill(bgCol), font: font(bold, fgCol, sz), alignment: align('right', 'center', false), border: bdr() } });
     setCell(7, rowIdx, { t: 's', v: '', s: { fill: fill(bgCol), border: bdr() } });
-    rowIdx++;
+    return rowIdx++;
   };
 
-  if (hasExempt)   addTotRow('Exempt Supplies — Drugs & Vaccines (VAT Act Cap 349)', exemptTotal, C.greenLight, '1B5E20');
-  if (hasStandard) addTotRow('Equipment / Standard-Rated Subtotal', standardSubtotal, C.amber, C.amberDark);
-  if (hasStandard) addTotRow('VAT 18% on Equipment', vat, C.redLight, 'B71C1C');
+  if (hasExempt)   exemptTotRow   = addTotRow('Exempt Supplies — Drugs & Vaccines (VAT Act Cap 349)', exemptTotal, sumOf(exemptAmtRows), C.greenLight, '1B5E20');
+  if (hasStandard) standardTotRow = addTotRow('Equipment / Standard-Rated Subtotal', standardSubtotal, sumOf(standardAmtRows), C.amber, C.amberDark);
+  if (hasStandard) vatRow         = addTotRow('VAT 18% on Equipment', vat, `ROUND(G${standardTotRow}*0.18,0)`, C.redLight, 'B71C1C');
+
+  // Grand total formula: sum whichever subtotal rows exist
+  const grandParts = [exemptTotRow, standardTotRow, vatRow].filter(Boolean).map(r => `G${r}`);
+  const grandFormula = grandParts.length ? grandParts.join('+') : '0';
 
   rowHeights[rowIdx] = 28;
   mc(0, rowIdx, 5, rowIdx, {
     t: 's', v: 'GRAND TOTAL (Uganda Shillings — UGX)',
     s: { fill: fill(C.green), font: font(true, C.white, 12), alignment: align('right', 'center', false), border: bdr() },
   });
-  setCell(6, rowIdx, { t: 'n', v: grandTotal, s: { fill: fill(C.green), font: font(true, C.gold, 13), alignment: align('right', 'center', false), border: bdr() } });
+  setCell(6, rowIdx, { t: 'n', v: grandTotal, f: grandFormula, s: { fill: fill(C.green), font: font(true, C.gold, 13), alignment: align('right', 'center', false), border: bdr() } });
   setCell(7, rowIdx, { t: 's', v: '', s: { fill: fill(C.green), border: bdr() } });
   rowIdx++;
 
