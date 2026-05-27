@@ -110,12 +110,16 @@ Return ONLY a valid JSON array with no explanation, markdown, or extra text:
     }
 
     const data = await geminiRes.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    // Extract the JSON array from the response (handles markdown code fences)
-    const jsonMatch = rawText.match(/\[[\s\S]*?\]/);
+    // Gemini 2.5 Flash is a thinking model — it puts reasoning in parts with thought:true
+    // and the actual answer in the non-thinking part. Always find the answer part.
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const rawText = (parts.find(p => !p.thought)?.text ?? parts[parts.length - 1]?.text) || '';
+
+    // Extract the JSON array — use greedy match so multi-object arrays aren't truncated
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      console.warn('[Gemini] No JSON array in response:', rawText.slice(0, 200));
+      console.warn('[Gemini] No JSON array in response:', rawText.slice(0, 300));
       res.status(200).json({ ok: true, items: [], warning: 'AI returned no structured data' });
       return;
     }
@@ -129,7 +133,7 @@ Return ONLY a valid JSON array with no explanation, markdown, or extra text:
     }
 
     console.log(`[Gemini] ${mode} parse: ${items.length} items from ${text.length} chars`);
-    res.status(200).json({ ok: true, items, model: 'gemini-1.5-flash', mode });
+    res.status(200).json({ ok: true, items, model: 'gemini-2.5-flash', mode });
 
   } catch (err) {
     const msg = err.name === 'TimeoutError'

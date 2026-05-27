@@ -45,10 +45,11 @@ export default defineConfig(({ mode }) => {
               );
               if (!gRes.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: `Gemini ${gRes.status}` })); return; }
               const data = await gRes.json();
-              const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              const jsonMatch = rawText.match(/\[[\s\S]*?\]/);
+              const parts = data?.candidates?.[0]?.content?.parts || [];
+              const rawText = (parts.find(p => !p.thought)?.text ?? parts[parts.length - 1]?.text) || '';
+              const jsonMatch = rawText.match(/\[[\s\S]*\]/);
               const items = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-              res.statusCode = 200; res.end(JSON.stringify({ ok: true, items, model: 'gemini-1.5-flash', mode }));
+              res.statusCode = 200; res.end(JSON.stringify({ ok: true, items, model: 'gemini-2.5-flash', mode }));
             } catch (err) {
               res.statusCode = 500; res.end(JSON.stringify({ error: err.message }));
             }
