@@ -44,29 +44,78 @@ export default async function handler(req, res) {
     .map(i => `  ID:"${i.id}"  Name:"${i.name}"${i.unit ? `  Unit:${i.unit}` : ''}`)
     .join('\n');
 
+  // ── Shared abbreviation glossary injected into both prompts ─────────────────
+  const ABBREV_GLOSSARY = `
+UGANDA VETERINARY PRODUCT ABBREVIATIONS (expand these when matching catalogue):
+- NCD or ND         = Newcastle Disease (vaccine)
+- IB                = Infectious Bronchitis
+- NCD+IB or ND+IB   = Newcastle Disease + Infectious Bronchitis (combined vaccine)
+- GUMBORO or IBD    = Gumboro Disease (Infectious Bursal Disease)
+- FOWL POX or FP    = Fowl Pox
+- MG                = Mycoplasma Gallisepticum
+- MS                = Mycoplasma Synoviae
+- AI                = Avian Influenza
+- AE                = Avian Encephalomyelitis
+- LT or ILT         = Infectious Laryngotracheitis
+- EDS               = Egg Drop Syndrome
+- MD or MAREKS      = Marek's Disease
+- COCCIDIOSIS or COCCI = Coccidiosis treatment
+- PPR               = Peste des Petits Ruminants (goat/sheep)
+- FMD               = Foot and Mouth Disease
+- BQ or BLKQ        = Blackquarter
+- ANTHRAX           = Anthrax vaccine
+- BRUCELLA          = Brucellosis vaccine
+- TRYP               = Trypanocide / Trypanosomiasis treatment
+- OXY or OXYTET     = Oxytetracycline
+- AMPROL            = Amprolium (coccidiostat)
+- TYLAN or TYL      = Tylosin
+
+DOSE SIZE NOTATION:
+- "DS" = Doses. "1000DS" = 1000 doses, "500DS" = 500 doses.
+- "1000D", "1000 doses", "1000 dose" all mean the same as "1000DS".
+- Catalogue entries follow the pattern: DISEASE_ABBREV DOSE_SIZE e.g. "NCD 1000DS".
+
+FORMAT PATTERN (hierarchical — very common in WhatsApp price lists):
+A category/disease name appears alone on one line, then dose+price lines follow below it.
+Example supplier text:
+  NCD
+  1000DS @6500 and 15,000
+  500DS  @5500
+  GUMBORO
+  1000DS @22,000
+  500DS  @11,000
+
+This means:
+  NCD 1000DS  → UGX 6,500  (use FIRST price when two are given)
+  NCD 500DS   → UGX 5,500
+  GUMBORO 1000DS → UGX 22,000
+  GUMBORO 500DS  → UGX 11,000
+`;
+
   const prompt = mode === 'price'
     ? `You are a price extraction assistant for SmartVet Africa, a veterinary procurement company in Uganda. Currency is Uganda Shillings (UGX).
-
-CATALOGUE (match supplier text to these items only):
+${ABBREV_GLOSSARY}
+CATALOGUE (match supplier text to these items only — use the catalogueId field):
 ${catalogueList}
 
 SUPPLIER TEXT:
 ${text}
 
 INSTRUCTIONS:
-- The text may list a product category on one line, then dose sizes and prices below it.
-  Example:  "NCD"  then  "1000DS @6500"  means the product "NCD 1000DS" costs UGX 6,500.
-- When a line has two prices like "@6500 and 15,000", use the FIRST price (6,500).
-- Match each price to the closest catalogue entry using the ID field.
-- Return prices as plain integers — no commas, no currency symbols.
-- Only include products you are confident about. Skip anything ambiguous.
-- If nothing matches, return an empty array.
+1. Use the abbreviation glossary above to expand short codes in the supplier text.
+2. Parse any hierarchical format: a disease name on its own line = category header for the lines below it.
+3. Combine category + dose size to get the full product name (e.g. "NCD" + "1000DS" = "NCD 1000DS").
+4. When a line has two prices like "@6500 and 15,000", always use the FIRST price (6,500).
+5. Match each product to the closest catalogue entry using name similarity and the ID field.
+6. Return prices as plain integers — no commas, no currency symbols.
+7. Only include products you are confident about. Skip anything ambiguous.
+8. If nothing matches, return an empty array [].
 
-Return ONLY a valid JSON array with no explanation, markdown, or extra text:
+Return ONLY a valid JSON array — no explanation, no markdown, no extra text:
 [{"catalogueId":"ER-HV01","productName":"NCD 1000DS","unitPrice":6500}]`
 
     : `You are an availability extraction assistant for SmartVet Africa, a veterinary procurement company in Uganda.
-
+${ABBREV_GLOSSARY}
 CATALOGUE (match supplier text to these items only):
 ${catalogueList}
 
@@ -74,15 +123,17 @@ SUPPLIER TEXT:
 ${text}
 
 INSTRUCTIONS:
-- Extract product availability status from the supplier message.
-- Status must be exactly one of: "in_stock", "low_stock", "out_of_stock"
-- "tight", "limited", "few left", "running low", "almost finished" → "low_stock"
-- "finished", "out", "none", "unavailable", "nil", "zero", "completely gone" → "out_of_stock"
-- "available", "in stock", "have", "yes" → "in_stock"
-- Only include products explicitly mentioned. Skip anything not in the catalogue.
-- If nothing matches, return an empty array.
+1. Use the abbreviation glossary above to expand short codes in the supplier text.
+2. Parse any hierarchical format: a disease name on its own line = category for the lines below it.
+3. Extract product availability status from the supplier message.
+4. Status must be exactly one of: "in_stock", "low_stock", "out_of_stock"
+   - "tight", "limited", "few left", "running low", "almost finished" → "low_stock"
+   - "finished", "out", "none", "unavailable", "nil", "zero", "completely gone" → "out_of_stock"
+   - "available", "in stock", "have", "yes", "plenty" → "in_stock"
+5. Only include products explicitly mentioned. Skip anything not in the catalogue.
+6. If nothing matches, return an empty array [].
 
-Return ONLY a valid JSON array with no explanation, markdown, or extra text:
+Return ONLY a valid JSON array — no explanation, no markdown, no extra text:
 [{"productId":"ER-HV01","productName":"NCD 1000DS","status":"in_stock"}]`;
 
   try {
@@ -95,7 +146,7 @@ Return ONLY a valid JSON array with no explanation, markdown, or extra text:
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.1,      // low temp → consistent structured output
-            maxOutputTokens: 1024,
+            maxOutputTokens: 2048,
           },
         }),
         signal: AbortSignal.timeout(20_000),

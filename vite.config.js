@@ -32,15 +32,16 @@ export default defineConfig(({ mode }) => {
 
             const catalogueList = catalogue.map(i => `  ID:"${i.id}"  Name:"${i.name}"${i.unit ? `  Unit:${i.unit}` : ''}`).join('\n');
 
+            const ABBREV = `UGANDA VETERINARY ABBREVIATIONS:\nNCD/ND=Newcastle Disease, IB=Infectious Bronchitis, NCD+IB=Newcastle+IB combined, GUMBORO/IBD=Gumboro Disease, FOWL POX/FP=Fowl Pox, MG=Mycoplasma Gallisepticum, AI=Avian Influenza, MD/MAREKS=Marek's Disease, COCCI=Coccidiosis, PPR=Peste des Petits Ruminants, FMD=Foot and Mouth, BQ=Blackquarter, OXY/OXYTET=Oxytetracycline, AMPROL=Amprolium, TYLAN=Tylosin.\nDS=Doses: 1000DS=1000 doses, 500DS=500 doses.\nHIERARCHICAL FORMAT: disease name alone on a line = header for dose+price lines below. "NCD\\n1000DS @6500" means NCD 1000DS costs 6500. Use FIRST price when two given.`;
             const prompt = mode === 'price'
-              ? `You are a price extraction assistant for SmartVet Africa, Uganda. Currency: UGX.\n\nCATALOGUE:\n${catalogueList}\n\nSUPPLIER TEXT:\n${text}\n\nINSTRUCTIONS:\n- Category on one line + dose+price below = "CATEGORY DOSE" product. E.g. "NCD" then "1000DS @6500" = "NCD 1000DS" at 6500.\n- Use first price when two appear ("@6500 and 15,000" → 6500).\n- Return prices as plain integers. Only confident matches.\n\nReturn ONLY a JSON array:\n[{"catalogueId":"...","productName":"...","unitPrice":6500}]`
-              : `You are an availability assistant for SmartVet Africa, Uganda.\n\nCATALOGUE:\n${catalogueList}\n\nSUPPLIER TEXT:\n${text}\n\nINSTRUCTIONS:\n- Status: exactly "in_stock", "low_stock", or "out_of_stock".\n- tight/limited/few = low_stock. finished/out/nil = out_of_stock.\n- Only explicitly mentioned products.\n\nReturn ONLY a JSON array:\n[{"productId":"...","productName":"...","status":"in_stock"}]`;
+              ? `You are a price extraction assistant for SmartVet Africa, Uganda. Currency: UGX.\n\n${ABBREV}\n\nCATALOGUE:\n${catalogueList}\n\nSUPPLIER TEXT:\n${text}\n\nINSTRUCTIONS:\n1. Expand abbreviations using the glossary above.\n2. Parse hierarchical format: category header + dose lines below = full product name.\n3. Use FIRST price when two appear. Return prices as plain integers.\n4. Match to catalogue IDs. Only confident matches.\n\nReturn ONLY a JSON array:\n[{"catalogueId":"...","productName":"...","unitPrice":6500}]`
+              : `You are an availability assistant for SmartVet Africa, Uganda.\n\n${ABBREV}\n\nCATALOGUE:\n${catalogueList}\n\nSUPPLIER TEXT:\n${text}\n\nINSTRUCTIONS:\n1. Expand abbreviations using the glossary.\n2. Status: exactly "in_stock", "low_stock", or "out_of_stock".\n3. tight/limited/few=low_stock. finished/out/nil=out_of_stock. available/yes/plenty=in_stock.\n\nReturn ONLY a JSON array:\n[{"productId":"...","productName":"...","status":"in_stock"}]`;
 
             try {
               const gRes = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }),
+                  body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 2048 } }),
                   signal: AbortSignal.timeout(20000) }
               );
               if (!gRes.ok) { res.statusCode = 502; res.end(JSON.stringify({ error: `Gemini ${gRes.status}` })); return; }
