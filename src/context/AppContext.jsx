@@ -1,104 +1,20 @@
+/**
+ * context/AppContext.jsx
+ *
+ * React context Provider and useApp hook for global application state.
+ * All state management logic (callbacks) lives here; the reducer and
+ * initialState are imported from their own modules.
+ */
+
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { storage } from '../utils/storage';
-import { PRODUCTS, SUPPLIERS, DEFAULT_INVENTORY, ROLES, LOCATIONS } from '../data/seedData';
-import {
-  makeGlobalVetSupplier,
-  makeEramSupplier,
-  makeBukoolaVetSupplier,
-  makeUltravetisSupplier,
-  makeNorbrookSupplier,
-  makeSangaVetSupplier,
-  makeConcFeedSupplier,
-  GLOBAL_VET_CATALOGUE,
-} from '../data/supplierCatalogues';
+import { ROLES } from '../data/seedData';
 import { generateDraftOrders, calculateSupplierBalance } from '../utils/calculations';
 import { generateTransferOrderId } from '../utils/formatter';
+import { reducer } from './appReducer';
+import { initialState } from './initialState';
 
 const AppContext = createContext(null);
-
-const initialState = () => {
-  const rawSuppliers = storage.get('suppliers', SUPPLIERS);
-  const suppliers = Object.fromEntries(
-    Object.entries(rawSuppliers).map(([name, details]) => [
-      name,
-      Array.isArray(details.catalogue) ? details : { ...details, catalogue: [] },
-    ])
-  );
-
-  const CATALOGUE_SEEDERS = [
-    ['Eram Uganda Ltd',    makeEramSupplier],
-    ['Global Vet (U) Ltd', makeGlobalVetSupplier],
-    ['Bukoola Vet',        makeBukoolaVetSupplier],
-    ['Ultravetis Uganda',  makeUltravetisSupplier],
-    ['Norbrook Uganda',          makeNorbrookSupplier],
-    ['Sanga Vet Chem Ltd',       makeSangaVetSupplier],
-    ['ConcFeed International',   makeConcFeedSupplier],
-  ];
-  for (const [name, makeFn] of CATALOGUE_SEEDERS) {
-    if (!suppliers[name] || !suppliers[name].catalogue.length) {
-      const seeded = makeFn();
-      suppliers[name] = { ...(suppliers[name] || {}), ...seeded };
-    }
-  }
-
-  // ── Catalogue patch: inject new items that may be missing from existing localStorage ──
-  const GV_PATCH_IDS = ['DEW-01b'];
-  const gv = suppliers['Global Vet (U) Ltd'];
-  if (gv?.catalogue?.length) {
-    const existingIds = new Set(gv.catalogue.map(i => i.id));
-    const newItems = GLOBAL_VET_CATALOGUE.filter(i => GV_PATCH_IDS.includes(i.id) && !existingIds.has(i.id));
-    if (newItems.length) {
-      suppliers['Global Vet (U) Ltd'] = { ...gv, catalogue: [...gv.catalogue, ...newItems] };
-    }
-  }
-
-  return {
-    products:          storage.get('products', PRODUCTS),
-    suppliers,
-    inventory:         storage.get('inventory', DEFAULT_INVENTORY),
-    orders:            storage.get('orders', []),
-    supplierAccounts:  storage.get('supplierAccounts', {}),
-    locations:         storage.get('locations', LOCATIONS),
-    transferOrders:    storage.get('transferOrders', []),
-    locationInventory: storage.get('locationInventory', {}),
-    stockCounts:       storage.get('stockCounts', []),
-    posApiUrl:         storage.get('posApiUrl', ''),
-    availabilityLog:   storage.get('availabilityLog', []),
-    priceLog:          storage.get('priceLog', []),
-    currentRole: storage.get('currentRole', 'admin'),
-    currentUser: null,
-    notifications: [],
-    activeTab: 'dashboard',
-    modals: {},
-  };
-};
-
-function reducer(state, action) {
-  switch (action.type) {
-    case 'SET_PRODUCTS':           return { ...state, products: action.payload };
-    case 'SET_SUPPLIERS':          return { ...state, suppliers: action.payload };
-    case 'SET_INVENTORY':          return { ...state, inventory: action.payload };
-    case 'SET_ORDERS':             return { ...state, orders: action.payload };
-    case 'SET_SUPPLIER_ACCOUNTS':  return { ...state, supplierAccounts: action.payload };
-    case 'SET_LOCATIONS':          return { ...state, locations: action.payload };
-    case 'SET_TRANSFER_ORDERS':    return { ...state, transferOrders: action.payload };
-    case 'SET_LOCATION_INVENTORY': return { ...state, locationInventory: action.payload };
-    case 'SET_STOCK_COUNTS':       return { ...state, stockCounts: action.payload };
-    case 'SET_POS_API_URL':        return { ...state, posApiUrl: action.payload };
-    case 'SET_AVAILABILITY_LOG':   return { ...state, availabilityLog: action.payload };
-    case 'SET_PRICE_LOG':          return { ...state, priceLog: action.payload };
-    case 'SET_ROLE':               return { ...state, currentRole: action.payload };
-    case 'SET_TAB':                return { ...state, activeTab: action.payload };
-    case 'ADD_NOTIFICATION':
-      return { ...state, notifications: [...state.notifications, action.payload] };
-    case 'REMOVE_NOTIFICATION':
-      return { ...state, notifications: state.notifications.filter(n => n.id !== action.payload) };
-    case 'SET_MODAL':
-      return { ...state, modals: { ...state.modals, [action.key]: action.value } };
-    default:
-      return state;
-  }
-}
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, initialState);
