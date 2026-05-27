@@ -281,7 +281,7 @@ export default function PricingAdvisory() {
           </p>
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          {[['calculator','🧮 Calculator'],['methodology','📖 Methodology']].map(([t,l]) => (
+          {[['calculator','Calculator'],['methodology','Methodology']].map(([t,l]) => (
             <button key={t} onClick={() => setActiveTab(t)}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activeTab === t ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
               {l}
@@ -292,26 +292,26 @@ export default function PricingAdvisory() {
 
       {activeTab === 'calculator' ? (
         <>
-          {/* Priority summary cards */}
-          <div className="grid grid-cols-4 gap-3">
+          {/* Priority summary — compact filter chips */}
+          <div className="flex gap-2 flex-wrap">
             {[
               { key: 'in_stock',  label: 'In Stock',  icon: '🟢', bg: 'bg-green-50 border-green-200', text: 'text-green-700' },
               { key: 'procured',  label: 'Procured',  icon: '🔵', bg: 'bg-blue-50  border-blue-200',  text: 'text-blue-700'  },
               { key: 'priced',    label: 'Priced',    icon: '🟡', bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700' },
-              { key: 'catalogue', label: 'Catalogue', icon: '⚪', bg: 'bg-gray-50  border-gray-200',  text: 'text-gray-600'  },
+              { key: 'catalogue', label: 'Catalogue', icon: '⚪', bg: 'bg-gray-50  border-gray-200',  text: 'text-gray-500'  },
             ].map(({ key, label, icon, bg, text }) => (
               <button key={key} onClick={() => setFilterPriority(filterPriority === key ? 'all' : key)}
-                className={`rounded-xl border shadow-sm px-4 py-3 text-left transition-all ${bg} ${filterPriority === key ? 'ring-2 ring-offset-1 ring-teal-400' : ''}`}>
-                <p className={`text-xs font-semibold uppercase tracking-wide ${text}`}>{icon} {label}</p>
-                <p className={`text-3xl font-black mt-0.5 ${text}`}>{counts[key]}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">
-                  {key === 'in_stock'  ? 'In warehouse now'       :
-                   key === 'procured'  ? 'On confirmed orders'    :
-                   key === 'priced'    ? 'Logged cost price'       :
-                                        'No price data yet'}
-                </p>
+                className={`flex items-center gap-2.5 rounded-xl border shadow-sm px-4 py-2.5 transition-all ${bg} ${filterPriority === key ? 'ring-2 ring-offset-1 ring-green-500' : 'hover:shadow'}`}>
+                <span className="text-base">{icon}</span>
+                <div className="text-left">
+                  <p className={`text-xl font-black leading-none ${text}`}>{counts[key]}</p>
+                  <p className={`text-[10px] font-semibold uppercase tracking-wide mt-0.5 ${text} opacity-80`}>{label}</p>
+                </div>
               </button>
             ))}
+            <div className="flex items-center ml-auto text-[11px] text-gray-400">
+              {counts.total} products total
+            </div>
           </div>
 
           {/* Markup controls */}
@@ -334,25 +334,18 @@ export default function PricingAdvisory() {
                 </button>
               </div>
             </div>
-            {/* Gross margin strip */}
-            <div className="flex gap-3 flex-wrap mt-4 pt-4 border-t border-gray-100">
+            {/* Gross margin — inline pills */}
+            <div className="flex items-center gap-2 flex-wrap mt-4 pt-4 border-t border-gray-100">
+              <span className="text-[11px] text-gray-400 font-medium">Gross margin:</span>
               {[
-                { label: 'Wholesale gross margin', pct: markups.wholesale, color: 'blue'  },
-                { label: 'Standard gross margin',  pct: markups.standard,  color: 'teal'  },
-                { label: 'Retail gross margin',    pct: markups.retail,    color: 'green' },
-              ].map(({ label, pct, color }) => {
-                const gm = grossMarginPct(null, pct).toFixed(1);
-                const cls = color === 'blue'  ? 'bg-blue-50  border-blue-200  text-blue-700'
-                  : color === 'teal'  ? 'bg-teal-50  border-teal-200  text-teal-700'
-                  :                     'bg-green-50 border-green-200 text-green-700';
-                return (
-                  <div key={label} className={`flex-1 min-w-36 border rounded-xl px-4 py-3 ${cls}`}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
-                    <p className="text-2xl font-black mt-0.5">{gm}%</p>
-                    <p className="text-[10px] opacity-60 mt-0.5">+{pct}% on cost → {gm}% gross margin</p>
-                  </div>
-                );
-              })}
+                { label: 'Wholesale', pct: markups.wholesale, cls: 'bg-blue-50  border-blue-200  text-blue-700'  },
+                { label: 'Standard',  pct: markups.standard,  cls: 'bg-teal-50  border-teal-200  text-teal-700'  },
+                { label: 'Retail',    pct: markups.retail,    cls: 'bg-green-50 border-green-200 text-green-700' },
+              ].map(({ label, pct, cls }) => (
+                <span key={label} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${cls}`}>
+                  {label} {grossMarginPct(null, pct).toFixed(1)}%
+                </span>
+              ))}
             </div>
           </div>
 
@@ -402,21 +395,15 @@ export default function PricingAdvisory() {
                     <th className="px-4 py-3 text-left text-gray-500 font-semibold">Product</th>
                     <th className="px-4 py-3 text-left text-gray-400 font-semibold hidden lg:table-cell">Supplier</th>
                     <th className="px-4 py-3 text-left text-gray-400 font-semibold">Status</th>
-                    <th className="px-4 py-3 text-right text-gray-500 font-semibold">
-                      Cost Price
-                      <span className="block text-[9px] font-normal text-gray-400 normal-case">editable if unlogged</span>
+                    <th className="px-4 py-3 text-right text-gray-500 font-semibold whitespace-nowrap">Cost Price</th>
+                    <th className="px-4 py-3 text-right text-blue-500 font-semibold whitespace-nowrap">
+                      Wholesale <span className="text-[9px] font-normal text-blue-300">+{markups.wholesale}%</span>
                     </th>
-                    <th className="px-4 py-3 text-right text-blue-500 font-semibold">
-                      Wholesale
-                      <span className="block text-[9px] font-normal text-blue-300">+{markups.wholesale}%</span>
+                    <th className="px-4 py-3 text-right text-teal-600 font-semibold whitespace-nowrap">
+                      Standard <span className="text-[9px] font-normal text-teal-300">+{markups.standard}%</span>
                     </th>
-                    <th className="px-4 py-3 text-right text-teal-600 font-semibold">
-                      Standard
-                      <span className="block text-[9px] font-normal text-teal-300">+{markups.standard}%</span>
-                    </th>
-                    <th className="px-4 py-3 text-right text-green-600 font-semibold">
-                      Retail
-                      <span className="block text-[9px] font-normal text-green-300">+{markups.retail}%</span>
+                    <th className="px-4 py-3 text-right text-green-600 font-semibold whitespace-nowrap">
+                      Retail <span className="text-[9px] font-normal text-green-300">+{markups.retail}%</span>
                     </th>
                     <th className="px-4 py-3 text-center text-gray-400 font-semibold hidden xl:table-cell">vs Market</th>
                   </tr>
@@ -469,7 +456,7 @@ export default function PricingAdvisory() {
                         <td className="px-4 py-2.5 text-right">
                           {row.loggedCost ? (
                             <div className="flex flex-col items-end">
-                              <span className="font-mono font-bold text-gray-700">{formatCurrency(row.loggedCost)}</span>
+                              <span className="font-mono font-bold text-gray-700 whitespace-nowrap">{formatCurrency(row.loggedCost)}</span>
                               <span className="text-[9px] text-gray-300 capitalize">{row.source || 'logged'}</span>
                             </div>
                           ) : (
@@ -490,17 +477,17 @@ export default function PricingAdvisory() {
                         </td>
 
                         {/* Wholesale */}
-                        <td className="px-4 py-2.5 text-right font-mono font-bold text-blue-600">
+                        <td className="px-4 py-2.5 text-right font-mono font-bold text-blue-600 whitespace-nowrap">
                           {wholesale ? formatCurrency(wholesale) : <span className="text-gray-200 font-normal">—</span>}
                         </td>
 
                         {/* Standard */}
-                        <td className="px-4 py-2.5 text-right font-mono font-bold text-teal-600">
+                        <td className="px-4 py-2.5 text-right font-mono font-bold text-teal-600 whitespace-nowrap">
                           {standard ? formatCurrency(standard) : <span className="text-gray-200 font-normal">—</span>}
                         </td>
 
                         {/* Retail + margin badge */}
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap">
                           {retail ? (
                             <div className="flex flex-col items-end gap-0.5">
                               <span className="font-mono font-bold text-green-600">{formatCurrency(retail)}</span>
@@ -531,13 +518,10 @@ export default function PricingAdvisory() {
 
             {/* Table footer */}
             {filtered.length > 0 && (
-              <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
                 <p className="text-[11px] text-gray-400">
                   Showing {filtered.length} of {enrichedProducts.length} products
                   {filterPriority !== 'all' || filterSupplier !== 'all' ? ' (filtered)' : ''}
-                </p>
-                <p className="text-[11px] text-gray-400">
-                  💡 Products without a logged cost show an editable field — enter a cost to see suggested prices
                 </p>
               </div>
             )}

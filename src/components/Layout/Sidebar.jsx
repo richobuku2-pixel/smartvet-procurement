@@ -85,10 +85,6 @@ export default function Sidebar() {
         </>
       )}
 
-      {/* Footer branding */}
-      <div className="mt-auto mx-4 pt-4 border-t border-gray-100">
-        <p className="text-xs text-gray-400 text-center leading-relaxed">SmartVet Africa<br/>Procurement v1.0</p>
-      </div>
     </aside>
   );
 }
