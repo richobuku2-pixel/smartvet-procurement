@@ -11,6 +11,7 @@ const TABS = [
   { id: 'suppliers',           label: 'Suppliers',          icon: '🏭' },
   { id: 'supplier-accounts',   label: 'Supplier Accounts',  icon: '💼' },
   { id: 'market-intelligence', label: 'Market Intelligence',icon: '🧠' },
+  { id: 'pricing-advisory',   label: 'Pricing Advisory',   icon: '💡' },
   { id: 'reports',             label: 'Reports',            icon: '📊' },
   { id: 'network',             label: 'Store Network',      icon: '🏪' },
 ];

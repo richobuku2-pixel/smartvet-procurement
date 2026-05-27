@@ -3,14 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { ROLES } from '../../data/seedData';
 import { useState } from 'react';
 import logoUrl from '/logo.png';
-
-function timeAgo(iso) {
-  const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+import { timeAgo } from '../../utils/formatter'; // use shared util — no local duplicate
 
 export default function Header() {
   const { currentUser, logout } = useAuth();
