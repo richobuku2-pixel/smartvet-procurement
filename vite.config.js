@@ -83,7 +83,7 @@ export default defineConfig(({ mode }) => {
             }
           });
 
-          // ── Africa's Talking SMS gateway ──────────────────────────────────
+          // ── Message Carrier SMS gateway ───────────────────────────────────
           server.middlewares.use('/api/send-sms', async (req, res) => {
             res.setHeader('Content-Type', 'application/json');
             if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method not allowed' })); return; }
@@ -96,32 +96,31 @@ export default defineConfig(({ mode }) => {
             const { phone, message } = body;
             if (!phone || !message) { res.statusCode = 400; res.end(JSON.stringify({ error: 'phone and message required' })); return; }
 
-            const apiKey   = env.AT_API_KEY;
-            const username = env.AT_USERNAME;
-
-            if (!apiKey || !username) {
-              console.warn('[SMS] AT_API_KEY or AT_USERNAME not set — SMS skipped');
+            const apiKey = env.MC_API_KEY;
+            if (!apiKey) {
+              console.warn('[SMS] MC_API_KEY not set — SMS skipped');
               res.statusCode = 200;
-              res.end(JSON.stringify({ ok: false, reason: 'SMS not configured — set AT_API_KEY and AT_USERNAME in .env' }));
+              res.end(JSON.stringify({ ok: false, reason: 'SMS not configured — set MC_API_KEY in .env' }));
               return;
             }
 
+            const to = phone.trim().startsWith('+') ? phone.trim() : `+${phone.trim().replace(/^0/, '256')}`;
+
             try {
-              const atBody = new URLSearchParams({ username, to: phone, message });
-              const atRes = await fetch('https://api.africastalking.com/version1/messaging', {
+              const mcRes = await fetch('https://api.messagecarrier.africa/api/sms/send', {
                 method: 'POST',
-                headers: { apiKey, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: atBody.toString(),
+                headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ recipient: to, message, sender_id: 'SmartVet' }),
                 signal: AbortSignal.timeout(10000),
               });
-              const data = await atRes.json();
-              const recipient = data?.SMSMessageData?.Recipients?.[0];
-              if (!atRes.ok || (recipient && recipient.status !== 'Success')) {
-                console.error('[SMS] AT error:', JSON.stringify(data));
+              const text = await mcRes.text();
+              let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+              if (!mcRes.ok) {
+                console.error(`[SMS] MC error ${mcRes.status}:`, text);
                 res.statusCode = 500; res.end(JSON.stringify({ error: data })); return;
               }
-              console.log(`[SMS] Sent to ${phone}: "${message.slice(0, 40)}…"`);
-              res.statusCode = 200; res.end(JSON.stringify({ ok: true, messageId: recipient?.messageId }));
+              console.log(`[SMS] Sent to ${to}: "${message.slice(0, 50)}…"`);
+              res.statusCode = 200; res.end(JSON.stringify({ ok: true, data }));
             } catch (err) {
               console.error('[SMS] Fetch failed:', err.message);
               res.statusCode = 500; res.end(JSON.stringify({ error: err.message }));

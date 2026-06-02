@@ -1,9 +1,9 @@
 /**
- * api/send-sms.js — Africa's Talking SMS gateway (Vercel serverless)
+ * api/send-sms.js — Message Carrier SMS gateway (Vercel serverless)
+ * https://www.messagecarrier.africa
  *
- * Required env vars:
- *   AT_API_KEY   — Africa's Talking API key (from africastalking.com dashboard)
- *   AT_USERNAME  — Your Africa's Talking username (use 'sandbox' for testing)
+ * Required env var:
+ *   MC_API_KEY — Message Carrier live API key
  *
  * POST body: { phone: string, message: string }
  */
@@ -19,38 +19,45 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'phone and message are required' });
   }
 
-  const apiKey   = process.env.AT_API_KEY;
-  const username = process.env.AT_USERNAME;
-
-  if (!apiKey || !username) {
-    console.warn('[SMS] AT_API_KEY or AT_USERNAME not set — SMS skipped');
-    return res.status(200).json({ ok: false, reason: 'SMS not configured' });
+  const apiKey = process.env.MC_API_KEY;
+  if (!apiKey) {
+    console.warn('[SMS] MC_API_KEY not set — SMS skipped');
+    return res.status(200).json({ ok: false, reason: 'SMS not configured — set MC_API_KEY in environment' });
   }
 
-  try {
-    const body = new URLSearchParams({ username, to: phone, message });
+  // Normalise phone: ensure + prefix for international format
+  const to = phone.trim().startsWith('+') ? phone.trim() : `+${phone.trim().replace(/^0/, '256')}`;
 
-    const atRes = await fetch('https://api.africastalking.com/version1/messaging', {
+  try {
+    const payload = {
+      recipient: to,
+      message,
+      sender_id: 'SmartVet',   // registered sender ID — update if MC requires a different one
+    };
+
+    const mcRes = await fetch('https://api.messagecarrier.africa/api/sms/send', {
       method:  'POST',
       headers: {
-        apiKey,
-        Accept:         'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+        'Accept':        'application/json',
       },
-      body: body.toString(),
+      body:   JSON.stringify(payload),
       signal: AbortSignal.timeout(10000),
     });
 
-    const data = await atRes.json();
+    // Log raw response so we can adjust if endpoint/format differs
+    const responseText = await mcRes.text();
+    let data;
+    try { data = JSON.parse(responseText); } catch { data = { raw: responseText }; }
 
-    const recipient = data?.SMSMessageData?.Recipients?.[0];
-    if (!atRes.ok || (recipient && recipient.status !== 'Success')) {
-      console.error('[SMS] Africa\'s Talking error:', JSON.stringify(data));
+    if (!mcRes.ok) {
+      console.error(`[SMS] Message Carrier error ${mcRes.status}:`, responseText);
       return res.status(500).json({ error: data });
     }
 
-    console.log(`[SMS] Sent to ${phone}: "${message.slice(0, 40)}…"`);
-    return res.status(200).json({ ok: true, messageId: recipient?.messageId });
+    console.log(`[SMS] Sent to ${to}: "${message.slice(0, 50)}…"`, data);
+    return res.status(200).json({ ok: true, data });
 
   } catch (err) {
     console.error('[SMS] Fetch failed:', err.message);
