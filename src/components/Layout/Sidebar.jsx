@@ -10,6 +10,7 @@ const TABS = [
   { id: 'approvals',           label: 'Approvals',          icon: '✅' },
   { id: 'suppliers',           label: 'Suppliers',          icon: '🏭' },
   { id: 'supplier-accounts',   label: 'Supplier Accounts',  icon: '💼' },
+  { id: 'fulfillment',          label: 'Fulfillment',         icon: '🚚' },
   { id: 'market-intelligence', label: 'Market Intelligence',icon: '🧠' },
   { id: 'pricing-advisory',   label: 'Pricing Advisory',   icon: '💡' },
   { id: 'reports',             label: 'Reports',            icon: '📊' },
@@ -17,10 +18,11 @@ const TABS = [
 ];
 
 export default function Sidebar() {
-  const { activeTab, orders, transferOrders, availabilityLog, priceLog, suppliers, dispatch } = useApp();
+  const { activeTab, orders, transferOrders, availabilityLog, priceLog, suppliers, salesOrders, dispatch } = useApp();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const pendingApprovals = orders.filter(o => o.status === 'pending_procurement' || o.status === 'pending_accounts').length;
+  const activeDeliveries = (salesOrders || []).filter(o => ['confirmed','picking','packed','dispatched','in_transit'].includes(o.status)).length;
   const draftCount = orders.filter(o => o.status === 'draft').length;
   const pendingTransfers = transferOrders.filter(t => t.status === 'pending').length;
 
@@ -37,7 +39,8 @@ export default function Sidebar() {
 
       {TABS.map(tab => {
         const isActive = activeTab === tab.id;
-        const badge = tab.id === 'approvals' && pendingApprovals > 0 ? pendingApprovals
+        const badge = tab.id === 'fulfillment' && activeDeliveries > 0 ? activeDeliveries
+          : tab.id === 'approvals' && pendingApprovals > 0 ? pendingApprovals
           : tab.id === 'orders' && draftCount > 0 ? draftCount
           : tab.id === 'network' && pendingTransfers > 0 ? pendingTransfers
           : tab.id === 'market-intelligence' && intelAlerts > 0 ? intelAlerts

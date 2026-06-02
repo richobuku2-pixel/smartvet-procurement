@@ -18,6 +18,7 @@ import UserManagement from './pages/UserManagement';
 import Network from './pages/Network';
 import MarketIntelligence from './pages/MarketIntelligence';
 import PricingAdvisory from './pages/PricingAdvisory';
+import Fulfillment from './pages/Fulfillment';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -42,6 +43,7 @@ function AppContent() {
     'supplier-accounts':   <SupplierAccounts />,
     'market-intelligence': <MarketIntelligence />,
     'pricing-advisory':    <PricingAdvisory />,
+    fulfillment:           <Fulfillment />,
     reports: <Reports />,
     users: <UserManagement />,
     network: <Network />,

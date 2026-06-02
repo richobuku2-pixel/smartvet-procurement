@@ -32,6 +32,8 @@ export function AppProvider({ children }) {
   useEffect(() => { storage.set('posApiUrl',         state.posApiUrl);         }, [state.posApiUrl]);
   useEffect(() => { storage.set('availabilityLog',   state.availabilityLog);   }, [state.availabilityLog]);
   useEffect(() => { storage.set('priceLog',          state.priceLog);           }, [state.priceLog]);
+  useEffect(() => { storage.set('salesOrders',       state.salesOrders);       }, [state.salesOrders]);
+  useEffect(() => { storage.set('riders',            state.riders);            }, [state.riders]);
   useEffect(() => { storage.set('currentRole',       state.currentRole);       }, [state.currentRole]);
 
   const notify = useCallback((message, type = 'success') => {
@@ -408,6 +410,145 @@ export function AppProvider({ children }) {
    * checks: [{ productId, productName, status: 'in_stock'|'out_of_stock'|'low_stock', notes }]
    * source: 'manual' | 'paste' | 'url'
    */
+  // ── Sales Orders (outbound delivery) ────────────────────────────────────────
+  const NEXT_FULFILLMENT_STATUS = {
+    confirmed:  'picking',
+    picking:    'packed',
+    packed:     'dispatched',
+    dispatched: 'in_transit',
+    in_transit: 'delivered',
+  };
+
+  const addSalesOrder = useCallback((orderData) => {
+    const year = new Date().getFullYear();
+    const soNumber = `SO-${year}-${String(state.salesOrders.length + 1).padStart(3, '0')}`;
+    const newOrder = {
+      ...orderData,
+      id: `so_${Date.now()}`,
+      soNumber,
+      status: 'confirmed',
+      fulfillmentLog: [{ status: 'confirmed', timestamp: new Date().toISOString(), by: orderData.createdBy || 'System', note: 'Order confirmed' }],
+      assignedRiderId: null,
+      pod: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    dispatch({ type: 'SET_SALES_ORDERS', payload: [...state.salesOrders, newOrder] });
+    notify(`Sales order ${soNumber} created.`, 'success');
+    return newOrder;
+  }, [state.salesOrders, notify]);
+
+  const advanceSalesOrder = useCallback((orderId, by = 'System', note = '') => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const nextStatus = NEXT_FULFILLMENT_STATUS[order.status];
+    if (!nextStatus) return;
+    const logEntry = { status: nextStatus, timestamp: new Date().toISOString(), by, note };
+    const updated = state.salesOrders.map(o =>
+      o.id !== orderId ? o : {
+        ...o, status: nextStatus, updatedAt: new Date().toISOString(),
+        fulfillmentLog: [...(o.fulfillmentLog || []), logEntry],
+      }
+    );
+    dispatch({ type: 'SET_SALES_ORDERS', payload: updated });
+    notify(`${order.soNumber} → ${nextStatus.replace('_', ' ')}.`, 'success');
+  }, [state.salesOrders, notify]);
+
+  const failSalesOrder = useCallback((orderId, by, note = '') => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const logEntry = { status: 'failed', timestamp: new Date().toISOString(), by, note };
+    const updated = state.salesOrders.map(o =>
+      o.id !== orderId ? o : {
+        ...o, status: 'failed', updatedAt: new Date().toISOString(),
+        fulfillmentLog: [...(o.fulfillmentLog || []), logEntry],
+      }
+    );
+    // Free rider
+    let updatedRiders = state.riders;
+    if (order.assignedRiderId) {
+      updatedRiders = state.riders.map(r => r.id === order.assignedRiderId ? { ...r, status: 'available' } : r);
+      dispatch({ type: 'SET_RIDERS', payload: updatedRiders });
+    }
+    dispatch({ type: 'SET_SALES_ORDERS', payload: updated });
+    notify(`${order.soNumber} marked failed.`, 'warning');
+  }, [state.salesOrders, state.riders, notify]);
+
+  const cancelSalesOrder = useCallback((orderId, by, note = '') => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const logEntry = { status: 'cancelled', timestamp: new Date().toISOString(), by, note };
+    const updated = state.salesOrders.map(o =>
+      o.id !== orderId ? o : {
+        ...o, status: 'cancelled', updatedAt: new Date().toISOString(),
+        fulfillmentLog: [...(o.fulfillmentLog || []), logEntry],
+      }
+    );
+    if (order.assignedRiderId) {
+      dispatch({ type: 'SET_RIDERS', payload: state.riders.map(r => r.id === order.assignedRiderId ? { ...r, status: 'available' } : r) });
+    }
+    dispatch({ type: 'SET_SALES_ORDERS', payload: updated });
+    notify(`${order.soNumber} cancelled.`, 'warning');
+  }, [state.salesOrders, state.riders, notify]);
+
+  const assignRiderToOrder = useCallback((orderId, riderId, by) => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    const rider = state.riders.find(r => r.id === riderId);
+    if (!order || !rider) return;
+    const logEntry = { status: order.status, timestamp: new Date().toISOString(), by, note: `Assigned to ${rider.name}` };
+    dispatch({ type: 'SET_SALES_ORDERS', payload: state.salesOrders.map(o =>
+      o.id !== orderId ? o : {
+        ...o, assignedRiderId: riderId, updatedAt: new Date().toISOString(),
+        fulfillmentLog: [...(o.fulfillmentLog || []), logEntry],
+      }
+    )});
+    if (rider.status === 'available') {
+      dispatch({ type: 'SET_RIDERS', payload: state.riders.map(r => r.id === riderId ? { ...r, status: 'on_delivery' } : r) });
+    }
+    notify(`${rider.name} assigned to ${order.soNumber}.`, 'success');
+  }, [state.salesOrders, state.riders, notify]);
+
+  const confirmPOD = useCallback((orderId, podData) => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const pod = { ...podData, confirmedAt: new Date().toISOString() };
+    const logEntry = { status: 'delivered', timestamp: new Date().toISOString(), by: podData.confirmedBy, note: 'Proof of delivery confirmed' };
+    dispatch({ type: 'SET_SALES_ORDERS', payload: state.salesOrders.map(o =>
+      o.id !== orderId ? o : {
+        ...o, status: 'delivered', pod, updatedAt: new Date().toISOString(),
+        fulfillmentLog: [...(o.fulfillmentLog || []), logEntry],
+      }
+    )});
+    if (order.assignedRiderId) {
+      dispatch({ type: 'SET_RIDERS', payload: state.riders.map(r => r.id === order.assignedRiderId ? { ...r, status: 'available' } : r) });
+    }
+    notify(`POD confirmed — ${order.soNumber} delivered!`, 'success');
+  }, [state.salesOrders, state.riders, notify]);
+
+  const updateSalesOrderPayment = useCallback((orderId, paymentStatus) => {
+    dispatch({ type: 'SET_SALES_ORDERS', payload: state.salesOrders.map(o =>
+      o.id !== orderId ? o : { ...o, paymentStatus, updatedAt: new Date().toISOString() }
+    )});
+    notify('Payment status updated.', 'success');
+  }, [state.salesOrders, notify]);
+
+  // ── Riders ───────────────────────────────────────────────────────────────────
+  const addRider = useCallback((data) => {
+    const rider = { ...data, id: `rider_${Date.now()}`, status: 'available', createdAt: new Date().toISOString() };
+    dispatch({ type: 'SET_RIDERS', payload: [...state.riders, rider] });
+    notify(`Rider ${rider.name} added.`, 'success');
+  }, [state.riders, notify]);
+
+  const updateRider = useCallback((id, data) => {
+    dispatch({ type: 'SET_RIDERS', payload: state.riders.map(r => r.id === id ? { ...r, ...data } : r) });
+    notify('Rider updated.', 'success');
+  }, [state.riders, notify]);
+
+  const deleteRider = useCallback((id) => {
+    dispatch({ type: 'SET_RIDERS', payload: state.riders.filter(r => r.id !== id) });
+    notify('Rider removed.', 'success');
+  }, [state.riders, notify]);
+
   const logAvailabilityCheck = useCallback(({ supplier, checks, checkedBy, source = 'manual', notes = '' }) => {
     const entry = {
       id: `av_${Date.now()}`,
@@ -470,6 +611,18 @@ export function AppProvider({ children }) {
     logAvailabilityCheck,
     // Price intelligence
     logPriceUpdate,
+    // Sales orders & delivery
+    addSalesOrder,
+    advanceSalesOrder,
+    failSalesOrder,
+    cancelSalesOrder,
+    assignRiderToOrder,
+    confirmPOD,
+    updateSalesOrderPayment,
+    // Riders
+    addRider,
+    updateRider,
+    deleteRider,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

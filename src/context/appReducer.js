@@ -21,6 +21,8 @@ export function reducer(state, action) {
     case 'SET_POS_API_URL':        return { ...state, posApiUrl: action.payload };
     case 'SET_AVAILABILITY_LOG':   return { ...state, availabilityLog: action.payload };
     case 'SET_PRICE_LOG':          return { ...state, priceLog: action.payload };
+    case 'SET_SALES_ORDERS':       return { ...state, salesOrders: action.payload };
+    case 'SET_RIDERS':             return { ...state, riders: action.payload };
     case 'SET_ROLE':               return { ...state, currentRole: action.payload };
     case 'SET_TAB':                return { ...state, activeTab: action.payload };
     case 'ADD_NOTIFICATION':

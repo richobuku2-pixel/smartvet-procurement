@@ -71,6 +71,8 @@ export const initialState = () => {
     posApiUrl:         storage.get('posApiUrl', ''),
     availabilityLog:   storage.get('availabilityLog', []),
     priceLog:          storage.get('priceLog', []),
+    salesOrders:       storage.get('salesOrders', []),
+    riders:            storage.get('riders', []),
     currentRole: storage.get('currentRole', 'admin'),
     currentUser: null,
     notifications: [],
