@@ -59,8 +59,8 @@ export default function Network() {
   const handleReject    = (t) => { if (window.confirm(`Reject ${t.orderId}?`)) updateTransferStatus(t.id, 'rejected',  { rejectedAt:  new Date().toISOString() }); };
   const handlePicking   = (t) => updateTransferStatus(t.id, 'picking',    { pickingAt:   new Date().toISOString() });
   const handleDispatch  = (t) => updateTransferStatus(t.id, 'dispatched', { dispatchedAt: new Date().toISOString() });
-  const handleReceive   = (receivedItems) => {
-    receiveTransfer(receivingTO.id, receivedItems);
+  const handleReceive   = (receivedItems, notes, signatureData) => {
+    receiveTransfer(receivingTO.id, receivedItems, notes, signatureData);
     setReceivingTO(null);
   };
 
