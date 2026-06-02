@@ -312,11 +312,11 @@ export function AppProvider({ children }) {
   }, [state.transferOrders]);
 
   /** Confirm transfer received at dark store — moves stock from main warehouse to location */
-  const receiveTransfer = useCallback((transferId, receivedItems, notes = '', signatureData = null) => {
+  const receiveTransfer = useCallback((transferId, receivedItems, notes = '') => {
     const transfer = state.transferOrders.find(t => t.id === transferId);
     if (!transfer) return;
 
-    // 1. Update transfer record — include signature and notes
+    // 1. Update transfer record
     const updatedTransfers = state.transferOrders.map(t =>
       t.id !== transferId ? t : {
         ...t,
@@ -325,7 +325,6 @@ export function AppProvider({ children }) {
         receivedItems,
         receivedAt: new Date().toISOString(),
         receivedNotes: notes || '',
-        receiverSignature: signatureData || null,
       }
     );
     dispatch({ type: 'SET_TRANSFER_ORDERS', payload: updatedTransfers });

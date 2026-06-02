@@ -1,42 +1,29 @@
 /**
  * orders/ReceiveModal.jsx
  *
- * Modal for confirming receipt of goods at the warehouse.
- * Requires an explicit signature before the receipt can be confirmed.
- * Signature is saved per-user so they only upload once.
+ * Modal for confirming receipt of goods at the warehouse. Lets staff verify
+ * actual received quantities against the ordered quantities and flag discrepancies.
+ *
+ * Props:
+ *   order     {Object}   — the order being received
+ *   onConfirm {Function} — called with { receivedBy, discrepancyNotes, receivedItems }
+ *   onClose   {Function} — closes the modal without saving
  */
 import { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from '../../utils/formatter';
-import SignatureCapture from '../SignatureCapture';
 
 export default function ReceiveModal({ order, onConfirm, onClose }) {
-  const { currentUser } = useAuth();
-  const userKey = currentUser?.email || currentUser?.id || 'unknown';
-
+  const [receivedBy, setReceivedBy] = useState('');
+  const [notes, setNotes] = useState('');
   const [qtys, setQtys] = useState(
     Object.fromEntries(order.items.map(i => [i.productId ?? i.id ?? i.productName, i.quantity]))
   );
-  const [notes, setNotes]       = useState('');
-  const [signature, setSignature] = useState(null);
-  const [signed, setSigned]     = useState(false);
 
   const totalOrdered  = order.items.reduce((s, i) => s + i.quantity, 0);
   const totalReceived = order.items.reduce((s, i) => s + (qtys[i.productId ?? i.id ?? i.productName] || 0), 0);
   const hasDiscrepancy = totalReceived !== totalOrdered;
 
-  const handleSign = (base64) => {
-    setSignature(base64);
-    setSigned(true);
-  };
-
-  const handleClearSign = () => {
-    setSignature(null);
-    setSigned(false);
-  };
-
   const handleConfirm = () => {
-    if (!signed || !signature) return;
     const receivedItems = order.items.map(item => {
       const key = item.productId ?? item.id ?? item.productName;
       return {
@@ -48,20 +35,12 @@ export default function ReceiveModal({ order, onConfirm, onClose }) {
         unitCost:    item.unitCost,
       };
     });
-    onConfirm({
-      receivedBy:        currentUser?.name || currentUser?.email || 'Unknown',
-      discrepancyNotes:  notes,
-      receivedItems,
-      signatureImg:      signature,
-      signedAt:          new Date().toISOString(),
-    });
+    onConfirm({ receivedBy, discrepancyNotes: notes, receivedItems });
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-
-        {/* Header */}
         <div className="bg-gradient-to-r from-green-800 to-teal-700 px-6 py-4 rounded-t-2xl flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-white font-bold text-base">Confirm Receipt at Warehouse</h3>
@@ -137,12 +116,19 @@ export default function ReceiveModal({ order, onConfirm, onClose }) {
             </div>
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Notes / Discrepancies</label>
-            <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Any comments about this delivery"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Received By *</label>
+              <input type="text" value={receivedBy} onChange={e => setReceivedBy(e.target.value)}
+                placeholder="Staff member name"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Notes / Discrepancies</label>
+              <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Any comments about this delivery"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
           </div>
 
           {hasDiscrepancy && (
@@ -150,31 +136,12 @@ export default function ReceiveModal({ order, onConfirm, onClose }) {
               ⚠ Quantities differ from the purchase order. The received quantities will be used to update inventory.
             </div>
           )}
-
-          {/* Signature — required before confirm */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-              Receiver Signature <span className="text-red-400 normal-case font-normal">* required to confirm</span>
-            </p>
-            <SignatureCapture
-              userKey={userKey}
-              onSign={handleSign}
-              onClear={handleClearSign}
-              signed={signed}
-            />
-          </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-between bg-gray-50 rounded-b-2xl flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100">
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!signed}
-            className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-bold hover:bg-green-800 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
-          >
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100">Cancel</button>
+          <button onClick={handleConfirm} disabled={!receivedBy.trim()}
+            className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-40">
             📦 Confirm Receipt & Update Inventory
           </button>
         </div>
