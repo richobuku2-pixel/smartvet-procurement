@@ -83,6 +83,51 @@ export default defineConfig(({ mode }) => {
             }
           });
 
+          // ── Africa's Talking SMS gateway ──────────────────────────────────
+          server.middlewares.use('/api/send-sms', async (req, res) => {
+            res.setHeader('Content-Type', 'application/json');
+            if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: 'Method not allowed' })); return; }
+
+            let raw = '';
+            for await (const chunk of req) raw += chunk;
+            let body;
+            try { body = JSON.parse(raw); } catch { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid JSON' })); return; }
+
+            const { phone, message } = body;
+            if (!phone || !message) { res.statusCode = 400; res.end(JSON.stringify({ error: 'phone and message required' })); return; }
+
+            const apiKey   = env.AT_API_KEY;
+            const username = env.AT_USERNAME;
+
+            if (!apiKey || !username) {
+              console.warn('[SMS] AT_API_KEY or AT_USERNAME not set — SMS skipped');
+              res.statusCode = 200;
+              res.end(JSON.stringify({ ok: false, reason: 'SMS not configured — set AT_API_KEY and AT_USERNAME in .env' }));
+              return;
+            }
+
+            try {
+              const atBody = new URLSearchParams({ username, to: phone, message });
+              const atRes = await fetch('https://api.africastalking.com/version1/messaging', {
+                method: 'POST',
+                headers: { apiKey, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: atBody.toString(),
+                signal: AbortSignal.timeout(10000),
+              });
+              const data = await atRes.json();
+              const recipient = data?.SMSMessageData?.Recipients?.[0];
+              if (!atRes.ok || (recipient && recipient.status !== 'Success')) {
+                console.error('[SMS] AT error:', JSON.stringify(data));
+                res.statusCode = 500; res.end(JSON.stringify({ error: data })); return;
+              }
+              console.log(`[SMS] Sent to ${phone}: "${message.slice(0, 40)}…"`);
+              res.statusCode = 200; res.end(JSON.stringify({ ok: true, messageId: recipient?.messageId }));
+            } catch (err) {
+              console.error('[SMS] Fetch failed:', err.message);
+              res.statusCode = 500; res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+
           server.middlewares.use('/api/send-reset', async (req, res) => {
             res.setHeader('Content-Type', 'application/json');
 
