@@ -3,24 +3,27 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { getMarketIntelligence } from '../../utils/marketIntelligence';
 
+// roles listed = which roles can see this tab; omit = all roles see it
 const TABS = [
-  { id: 'dashboard',           label: 'Dashboard',          icon: '🏠' },
-  { id: 'inventory',           label: 'Inventory',          icon: '📦' },
-  { id: 'orders',              label: 'Orders',             icon: '🧾' },
-  { id: 'approvals',           label: 'Approvals',          icon: '✅' },
-  { id: 'suppliers',           label: 'Suppliers',          icon: '🏭' },
-  { id: 'supplier-accounts',   label: 'Supplier Accounts',  icon: '💼' },
-  { id: 'fulfillment',          label: 'Fulfillment',         icon: '🚚' },
-  { id: 'market-intelligence', label: 'Market Intelligence',icon: '🧠' },
-  { id: 'pricing-advisory',   label: 'Pricing Advisory',   icon: '💡' },
-  { id: 'reports',             label: 'Reports',            icon: '📊' },
-  { id: 'network',             label: 'Store Network',      icon: '🏪' },
+  { id: 'dashboard',           label: 'Dashboard',           icon: '🏠' },
+  { id: 'inventory',           label: 'Inventory',           icon: '📦',  roles: ['admin','inventory_manager','procurement_manager'] },
+  { id: 'orders',              label: 'Orders',              icon: '🧾',  roles: ['admin','procurement_manager','accounts_manager','inventory_manager'] },
+  { id: 'approvals',           label: 'Approvals',           icon: '✅',  roles: ['admin','procurement_manager','accounts_manager'] },
+  { id: 'suppliers',           label: 'Suppliers',           icon: '🏭',  roles: ['admin','procurement_manager'] },
+  { id: 'supplier-accounts',   label: 'Supplier Accounts',   icon: '💼',  roles: ['admin','accounts_manager'] },
+  { id: 'fulfillment',         label: 'Fulfillment',         icon: '🚚',  roles: ['admin','fulfillment_manager'] },
+  { id: 'market-intelligence', label: 'Market Intelligence', icon: '🧠',  roles: ['admin','procurement_manager'] },
+  { id: 'pricing-advisory',    label: 'Pricing Advisory',    icon: '💡',  roles: ['admin','procurement_manager','accounts_manager'] },
+  { id: 'reports',             label: 'Reports',             icon: '📊',  roles: ['admin','accounts_manager','procurement_manager'] },
+  { id: 'network',             label: 'Store Network',       icon: '🏪',  roles: ['admin','inventory_manager'] },
 ];
 
 export default function Sidebar() {
   const { activeTab, orders, transferOrders, availabilityLog, priceLog, suppliers, salesOrders, dispatch } = useApp();
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin    = currentUser?.role === 'admin';
+  const userRole   = currentUser?.role || 'admin';
+  const visibleTabs = TABS.filter(t => !t.roles || t.roles.includes(userRole));
   const pendingApprovals = orders.filter(o => o.status === 'pending_procurement' || o.status === 'pending_accounts').length;
   const activeDeliveries = (salesOrders || []).filter(o => ['confirmed','picking','packed','dispatched','in_transit'].includes(o.status)).length;
   const draftCount = orders.filter(o => o.status === 'draft').length;
@@ -37,7 +40,7 @@ export default function Sidebar() {
       {/* Brand accent strip */}
       <div className="mx-4 mb-3 h-0.5 bg-gradient-to-r from-green-600 to-teal-500 rounded-full opacity-50" />
 
-      {TABS.map(tab => {
+      {visibleTabs.map(tab => {
         const isActive = activeTab === tab.id;
         const badge = tab.id === 'fulfillment' && activeDeliveries > 0 ? activeDeliveries
           : tab.id === 'approvals' && pendingApprovals > 0 ? pendingApprovals

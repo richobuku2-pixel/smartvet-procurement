@@ -125,10 +125,11 @@ export const SUPPLIERS = {
 export const DEFAULT_INVENTORY = Object.fromEntries(PRODUCTS.map(p => [p.id, p.reorderPoint + 5]));
 
 export const ROLES = {
-  procurement_manager: { label: 'Procurement Manager', permissions: ['approve_procurement', 'view_all_orders', 'add_comments'] },
-  accounts_manager: { label: 'Accounts Manager', permissions: ['approve_accounts', 'record_payments', 'view_accounts'] },
-  inventory_manager: { label: 'Inventory Manager', permissions: ['update_inventory', 'view_orders'] },
-  admin: { label: 'Admin', permissions: ['approve_procurement', 'approve_accounts', 'record_payments', 'update_inventory', 'view_all_orders', 'view_accounts', 'add_comments'] },
+  procurement_manager:  { label: 'Procurement Manager',  permissions: ['approve_procurement', 'view_all_orders', 'add_comments'] },
+  accounts_manager:     { label: 'Accounts Manager',     permissions: ['approve_accounts', 'record_payments', 'view_accounts'] },
+  inventory_manager:    { label: 'Inventory Manager',    permissions: ['update_inventory', 'view_orders'] },
+  fulfillment_manager:  { label: 'Fulfillment Manager',  permissions: ['view_fulfillment', 'manage_deliveries', 'manage_riders', 'confirm_pod'] },
+  admin: { label: 'Admin', permissions: ['approve_procurement', 'approve_accounts', 'record_payments', 'update_inventory', 'view_all_orders', 'view_accounts', 'add_comments', 'view_fulfillment', 'manage_deliveries', 'manage_riders', 'confirm_pod'] },
 };
 
 export const SEED_PASSWORD = 'smartvet2026';

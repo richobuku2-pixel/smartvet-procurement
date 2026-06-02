@@ -7,6 +7,7 @@
  */
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrency, timeAgo } from '../utils/formatter';
 import NewSalesOrderModal from '../components/fulfillment/NewSalesOrderModal';
 import SalesOrderModal, { STATUS_META } from '../components/fulfillment/SalesOrderModal';
@@ -47,7 +48,11 @@ function StatusBadge({ status }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Fulfillment() {
-  const { salesOrders, riders, deleteRider } = useApp();
+  const { salesOrders, riders, deleteRider, hasPermission } = useApp();
+  const { currentUser } = useAuth();
+
+  const canManageDeliveries = hasPermission('manage_deliveries');
+  const canManageRiders     = hasPermission('manage_riders');
 
   const [activeTab, setActiveTab]       = useState('orders');
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -117,12 +122,13 @@ export default function Fulfillment() {
               </button>
             ))}
           </div>
-          {activeTab === 'orders' ? (
+          {activeTab === 'orders' && canManageDeliveries && (
             <button onClick={() => setShowNewOrder(true)}
               className="px-4 py-2 bg-green-700 hover:bg-green-800 text-white text-xs font-bold rounded-xl transition-colors">
               + New Order
             </button>
-          ) : (
+          )}
+          {activeTab === 'riders' && canManageRiders && (
             <button onClick={() => setShowNewRider(true)}
               className="px-4 py-2 bg-green-700 hover:bg-green-800 text-white text-xs font-bold rounded-xl transition-colors">
               + Add Rider
@@ -317,17 +323,19 @@ export default function Fulfillment() {
                       </div>
                     )}
 
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                      <button onClick={() => setEditRider(rider)}
-                        className="flex-1 text-xs py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium">
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => { if (window.confirm(`Remove ${rider.name}?`)) deleteRider(rider.id); }}
-                        className="text-xs py-1.5 px-3 border border-red-100 rounded-lg text-red-400 hover:bg-red-50 font-medium">
-                        Remove
-                      </button>
-                    </div>
+                    {canManageRiders && (
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                        <button onClick={() => setEditRider(rider)}
+                          className="flex-1 text-xs py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium">
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => { if (window.confirm(`Remove ${rider.name}?`)) deleteRider(rider.id); }}
+                          className="text-xs py-1.5 px-3 border border-red-100 rounded-lg text-red-400 hover:bg-red-50 font-medium">
+                          Remove
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
