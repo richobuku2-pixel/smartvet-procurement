@@ -73,6 +73,7 @@ export const initialState = () => {
     priceLog:          storage.get('priceLog', []),
     salesOrders:       storage.get('salesOrders', []),
     riders:            storage.get('riders', []),
+    communicationsLog: storage.get('communicationsLog', []),
     currentRole: storage.get('currentRole', 'admin'),
     currentUser: null,
     notifications: [],

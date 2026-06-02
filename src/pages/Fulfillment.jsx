@@ -12,6 +12,8 @@ import { formatCurrency, timeAgo } from '../utils/formatter';
 import NewSalesOrderModal from '../components/fulfillment/NewSalesOrderModal';
 import SalesOrderModal, { STATUS_META } from '../components/fulfillment/SalesOrderModal';
 import RiderModal from '../components/fulfillment/RiderModal';
+import CommunicationsTab from '../components/fulfillment/CommunicationsTab';
+import PerformanceTab from '../components/fulfillment/PerformanceTab';
 
 // ── Pipeline stages in order ──────────────────────────────────────────────────
 const PIPELINE = [
@@ -115,9 +117,9 @@ export default function Fulfillment() {
         <div className="flex items-center gap-2">
           {/* Sub-tab toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-            {[['orders','Sales Orders'],['riders','Riders']].map(([t,l]) => (
+            {[['orders','Sales Orders'],['riders','Riders'],['communications','Communications'],['performance','Performance']].map(([t,l]) => (
               <button key={t} onClick={() => setActiveTab(t)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activeTab === t ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activeTab === t ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
                 {l}
               </button>
             ))}
@@ -343,6 +345,12 @@ export default function Fulfillment() {
           )}
         </>
       )}
+
+      {/* ── COMMUNICATIONS TAB ─────────────────────────────────────────────── */}
+      {activeTab === 'communications' && <CommunicationsTab />}
+
+      {/* ── PERFORMANCE TAB ────────────────────────────────────────────────── */}
+      {activeTab === 'performance' && <PerformanceTab />}
 
       {/* Modals */}
       {showNewOrder && <NewSalesOrderModal onClose={() => setShowNewOrder(false)} />}

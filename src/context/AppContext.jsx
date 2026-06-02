@@ -11,7 +11,7 @@ import { storage } from '../utils/storage';
 import { ROLES } from '../data/seedData';
 import { generateDraftOrders, calculateSupplierBalance } from '../utils/calculations';
 import { generateTransferOrderId } from '../utils/formatter';
-import { sendDeliverySMS } from '../utils/smsService';
+import { sendDeliverySMS, sendCustomSMS } from '../utils/smsService';
 import { reducer } from './appReducer';
 import { initialState } from './initialState';
 
@@ -35,6 +35,7 @@ export function AppProvider({ children }) {
   useEffect(() => { storage.set('priceLog',          state.priceLog);           }, [state.priceLog]);
   useEffect(() => { storage.set('salesOrders',       state.salesOrders);       }, [state.salesOrders]);
   useEffect(() => { storage.set('riders',            state.riders);            }, [state.riders]);
+  useEffect(() => { storage.set('communicationsLog', state.communicationsLog); }, [state.communicationsLog]);
   useEffect(() => { storage.set('currentRole',       state.currentRole);       }, [state.currentRole]);
 
   const notify = useCallback((message, type = 'success') => {
@@ -437,9 +438,9 @@ export function AppProvider({ children }) {
     };
     dispatch({ type: 'SET_SALES_ORDERS', payload: [...state.salesOrders, newOrder] });
     notify(`Sales order ${soNumber} created.`, 'success');
-    sendDeliverySMS(newOrder.customer?.phone, 'confirmed', newOrder);
+    sendDeliverySMS(newOrder.customer?.phone, 'confirmed', newOrder).then(r => logComm(newOrder.id, soNumber, newOrder.customer, r));
     return newOrder;
-  }, [state.salesOrders, notify]);
+  }, [state.salesOrders, logComm, notify]);
 
   const advanceSalesOrder = useCallback((orderId, by = 'System', note = '') => {
     const order = state.salesOrders.find(o => o.id === orderId);
@@ -456,8 +457,8 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_SALES_ORDERS', payload: updated });
     notify(`${order.soNumber} → ${nextStatus.replace('_', ' ')}.`, 'success');
     const rider = state.riders.find(r => r.id === order.assignedRiderId);
-    sendDeliverySMS(order.customer?.phone, nextStatus, order, rider);
-  }, [state.salesOrders, state.riders, notify]);
+    sendDeliverySMS(order.customer?.phone, nextStatus, order, rider).then(r => logComm(order.id, order.soNumber, order.customer, r));
+  }, [state.salesOrders, state.riders, logComm, notify]);
 
   const failSalesOrder = useCallback((orderId, by, note = '') => {
     const order = state.salesOrders.find(o => o.id === orderId);
@@ -477,8 +478,8 @@ export function AppProvider({ children }) {
     }
     dispatch({ type: 'SET_SALES_ORDERS', payload: updated });
     notify(`${order.soNumber} marked failed.`, 'warning');
-    sendDeliverySMS(order.customer?.phone, 'failed', order);
-  }, [state.salesOrders, state.riders, notify]);
+    sendDeliverySMS(order.customer?.phone, 'failed', order).then(r => logComm(order.id, order.soNumber, order.customer, r));
+  }, [state.salesOrders, state.riders, logComm, notify]);
 
   const cancelSalesOrder = useCallback((orderId, by, note = '') => {
     const order = state.salesOrders.find(o => o.id === orderId);
@@ -495,8 +496,8 @@ export function AppProvider({ children }) {
     }
     dispatch({ type: 'SET_SALES_ORDERS', payload: updated });
     notify(`${order.soNumber} cancelled.`, 'warning');
-    sendDeliverySMS(order.customer?.phone, 'cancelled', order);
-  }, [state.salesOrders, state.riders, notify]);
+    sendDeliverySMS(order.customer?.phone, 'cancelled', order).then(r => logComm(order.id, order.soNumber, order.customer, r));
+  }, [state.salesOrders, state.riders, logComm, notify]);
 
   const assignRiderToOrder = useCallback((orderId, riderId, by) => {
     const order = state.salesOrders.find(o => o.id === orderId);
@@ -530,8 +531,8 @@ export function AppProvider({ children }) {
       dispatch({ type: 'SET_RIDERS', payload: state.riders.map(r => r.id === order.assignedRiderId ? { ...r, status: 'available' } : r) });
     }
     notify(`POD confirmed — ${order.soNumber} delivered!`, 'success');
-    sendDeliverySMS(order.customer?.phone, 'delivered', order);
-  }, [state.salesOrders, state.riders, notify]);
+    sendDeliverySMS(order.customer?.phone, 'delivered', order).then(r => logComm(order.id, order.soNumber, order.customer, r));
+  }, [state.salesOrders, state.riders, logComm, notify]);
 
   const updateSalesOrderPayment = useCallback((orderId, paymentStatus) => {
     dispatch({ type: 'SET_SALES_ORDERS', payload: state.salesOrders.map(o =>
@@ -556,6 +557,47 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_RIDERS', payload: state.riders.filter(r => r.id !== id) });
     notify('Rider removed.', 'success');
   }, [state.riders, notify]);
+
+  // ── Communications log ───────────────────────────────────────────────────────
+  const logComm = useCallback((orderId, soNumber, customer, smsEntry, sentBy = 'system') => {
+    if (!smsEntry) return;
+    const entry = {
+      id:           `comm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      orderId,
+      soNumber,
+      customerName: customer?.name || '',
+      customerPhone: customer?.phone || '',
+      ...smsEntry,
+      sentBy,
+    };
+    dispatch({ type: 'SET_COMMUNICATIONS_LOG', payload: [entry, ...(state.communicationsLog || [])].slice(0, 1000) });
+  }, [state.communicationsLog]);
+
+  const sendManualSMS = useCallback(async (orderId, phone, message, by) => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    const result = await sendCustomSMS(phone, message);
+    logComm(orderId, order?.soNumber || '', order?.customer, result, by || 'manual');
+    notify(result?.status === 'sent' ? 'SMS sent.' : 'SMS queued (check provider logs).', 'info');
+  }, [state.salesOrders, logComm, notify]);
+
+  const rescheduleSalesOrder = useCallback(async (orderId, newDate, note, by) => {
+    const order = state.salesOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const attempts = (order.deliveryAttempts || 0) + 1;
+    const logEntry = { status: 'confirmed', timestamp: new Date().toISOString(), by, note: `Rescheduled (attempt ${attempts})${note ? ': ' + note : ''}` };
+    const updatedOrder = {
+      ...order,
+      status: 'confirmed',
+      expectedDelivery: newDate || order.expectedDelivery,
+      deliveryAttempts: attempts,
+      updatedAt: new Date().toISOString(),
+      fulfillmentLog: [...(order.fulfillmentLog || []), logEntry],
+    };
+    dispatch({ type: 'SET_SALES_ORDERS', payload: state.salesOrders.map(o => o.id !== orderId ? o : updatedOrder) });
+    notify(`${order.soNumber} rescheduled (attempt ${attempts}).`, 'info');
+    const smsResult = await sendDeliverySMS(order.customer?.phone, 'rescheduled', updatedOrder);
+    logComm(orderId, order.soNumber, order.customer, smsResult, 'system');
+  }, [state.salesOrders, logComm, notify]);
 
   const logAvailabilityCheck = useCallback(({ supplier, checks, checkedBy, source = 'manual', notes = '' }) => {
     const entry = {
@@ -631,6 +673,10 @@ export function AppProvider({ children }) {
     addRider,
     updateRider,
     deleteRider,
+    // Communications
+    sendManualSMS,
+    rescheduleSalesOrder,
+    logComm,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
