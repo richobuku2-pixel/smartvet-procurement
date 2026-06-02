@@ -19,17 +19,63 @@ const STATUS_COLOR = {
   skipped: 'bg-gray-50 text-gray-400 border-gray-100',
 };
 
+// Pre-built SMS templates — {soNumber}, {name}, {phone} are replaced at send time
+const SMS_TEMPLATES = [
+  {
+    category: 'Delivery',
+    icon: '🚚',
+    templates: [
+      { label: 'Rider on the way',      text: 'SmartVet: Hi {name}, your rider is almost at your location for order {soNumber}. Please be available to receive. Thank you!' },
+      { label: 'Slight delay',          text: 'SmartVet: Hi {name}, delivery of order {soNumber} is running slightly late. Your order is still on the way — we apologize for the inconvenience.' },
+      { label: 'Delayed — reschedule',  text: 'SmartVet: Hi {name}, we\'re unable to complete delivery of order {soNumber} today. Our team will contact you to arrange a new time. We apologize.' },
+      { label: 'Unable to reach you',   text: 'SmartVet: Hi {name}, we attempted delivery of order {soNumber} but couldn\'t reach you. Please call us back to reschedule. Thank you.' },
+      { label: 'Wrong address',         text: 'SmartVet: Hi {name}, our rider couldn\'t find your address for order {soNumber}. Please confirm your exact location by calling us. Thank you.' },
+    ],
+  },
+  {
+    category: 'Payment',
+    icon: '💰',
+    templates: [
+      { label: 'Payment reminder',      text: 'SmartVet: Reminder — payment for order {soNumber} is pending. Please have your payment ready on delivery. Thank you, {name}.' },
+      { label: 'Confirm cash on hand',  text: 'SmartVet: Hi {name}, our rider is heading to you with order {soNumber}. Please confirm you have the exact cash amount ready. Thank you!' },
+      { label: 'Payment received',      text: 'SmartVet: Hi {name}, we have received your payment for order {soNumber}. Thank you for your business!' },
+    ],
+  },
+  {
+    category: 'Updates',
+    icon: '📢',
+    templates: [
+      { label: 'Order being prepared',  text: 'SmartVet: Hi {name}, your order {soNumber} is currently being prepared at our warehouse. We\'ll notify you when it\'s dispatched.' },
+      { label: 'Ready for dispatch',    text: 'SmartVet: Good news {name}! Order {soNumber} is packed and ready for dispatch. Delivery is coming your way soon.' },
+      { label: 'Feedback request',      text: 'SmartVet: Hi {name}, thank you for your order {soNumber}! We hope you\'re happy with your delivery. Any feedback? Please reply or call us.' },
+      { label: 'Holiday notice',        text: 'SmartVet: Hi {name}, please note that deliveries may be delayed due to the public holiday. Order {soNumber} will be delivered as soon as possible. We apologize.' },
+    ],
+  },
+];
+
 export default function CommunicationsTab() {
   const { salesOrders, communicationsLog, sendManualSMS, rescheduleSalesOrder } = useApp();
   const { currentUser } = useAuth();
   const by = currentUser?.name || currentUser?.email || 'Staff';
 
-  const [search, setSearch]       = useState('');
-  const [filterOrder, setFilterOrder] = useState('all');
+  const [search, setSearch]             = useState('');
+  const [filterOrder, setFilterOrder]   = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [manualOrder, setManualOrder]   = useState('');
   const [manualMsg, setManualMsg]       = useState('');
   const [sending, setSending]           = useState(false);
+  const [activeCategory, setActiveCategory] = useState(SMS_TEMPLATES[0].category);
+
+  // Fill template placeholders with the selected order's real values
+  const applyTemplate = (templateText) => {
+    const order = salesOrders.find(o => o.id === manualOrder);
+    if (!order) { setManualMsg(templateText); return; }
+    const filled = templateText
+      .replace(/\{soNumber\}/g, order.soNumber || '')
+      .replace(/\{name\}/g,     order.customer?.name || 'Customer')
+      .replace(/\{phone\}/g,    order.customer?.phone || '');
+    setManualMsg(filled);
+  };
 
   // Failed orders that need reschedule
   const failedOrders = useMemo(() =>
@@ -120,32 +166,97 @@ export default function CommunicationsTab() {
         </div>
       )}
 
-      {/* Manual send */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-        <p className="text-sm font-bold text-gray-800 mb-3">Send Manual Message</p>
-        <div className="flex gap-3 flex-wrap">
-          <select value={manualOrder} onChange={e => setManualOrder(e.target.value)}
-            className="flex-1 min-w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-            <option value="">Select order…</option>
-            {recentOrders.map(o => (
-              <option key={o.id} value={o.id}>
-                {o.soNumber} — {o.customer?.name} ({o.customer?.phone})
-              </option>
+      {/* Send a message */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
+          <p className="text-sm font-bold text-gray-800">Send Message</p>
+          <p className="text-xs text-gray-400 mt-0.5">Pick a template or compose your own</p>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Order selector */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Select Order</label>
+            <select value={manualOrder} onChange={e => setManualOrder(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+              <option value="">Choose an order…</option>
+              {recentOrders.map(o => (
+                <option key={o.id} value={o.id}>
+                  {o.soNumber} — {o.customer?.name} · {o.customer?.phone}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Template categories */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Templates</label>
+
+            {/* Category tabs */}
+            <div className="flex gap-1 mb-3">
+              {SMS_TEMPLATES.map(cat => (
+                <button key={cat.category} type="button"
+                  onClick={() => setActiveCategory(cat.category)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    activeCategory === cat.category
+                      ? 'bg-green-700 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>
+                  {cat.icon} {cat.category}
+                </button>
+              ))}
+            </div>
+
+            {/* Template buttons */}
+            {SMS_TEMPLATES.filter(c => c.category === activeCategory).map(cat => (
+              <div key={cat.category} className="flex flex-wrap gap-2">
+                {cat.templates.map(t => (
+                  <button key={t.label} type="button"
+                    onClick={() => applyTemplate(t.text)}
+                    className="text-xs px-3 py-2 bg-gray-50 hover:bg-green-50 border border-gray-200 hover:border-green-300 text-gray-700 hover:text-green-800 rounded-lg font-medium transition-colors text-left">
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             ))}
-          </select>
-          <input type="text" value={manualMsg} onChange={e => setManualMsg(e.target.value)}
-            placeholder="Type your message… (max 160 chars)"
-            maxLength={160}
-            className="flex-1 min-w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          </div>
+
+          {/* Message preview / editor */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-gray-500 uppercase">Message</label>
+              {manualMsg && (
+                <button type="button" onClick={() => setManualMsg('')}
+                  className="text-[10px] text-gray-400 hover:text-red-400">Clear</button>
+              )}
+            </div>
+            <textarea
+              value={manualMsg}
+              onChange={e => setManualMsg(e.target.value)}
+              placeholder="Select a template above, or type your message here…"
+              rows={4}
+              maxLength={320}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+            />
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-[10px] text-gray-400">
+                {manualMsg.length > 160
+                  ? <span className="text-amber-600">⚠ {manualMsg.length} chars — will send as 2 SMS units</span>
+                  : `${manualMsg.length}/160 characters`}
+              </p>
+              {!manualOrder && manualMsg.includes('{') && (
+                <p className="text-[10px] text-amber-500">⚠ Select an order to fill placeholders</p>
+              )}
+            </div>
+          </div>
+
+          {/* Send button */}
           <button onClick={handleManualSend}
             disabled={!manualOrder || !manualMsg.trim() || sending}
-            className="px-4 py-2 bg-green-700 hover:bg-green-800 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-lg transition-colors">
-            {sending ? 'Sending…' : '📤 Send SMS'}
+            className="w-full py-2.5 bg-green-700 hover:bg-green-800 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-colors">
+            {sending ? '⏳ Sending…' : '📤 Send SMS'}
           </button>
         </div>
-        {manualMsg.length > 0 && (
-          <p className="text-[10px] text-gray-400 mt-1 text-right">{manualMsg.length}/160 characters</p>
-        )}
       </div>
 
       {/* Comms log */}
