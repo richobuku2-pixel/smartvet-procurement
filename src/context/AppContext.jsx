@@ -44,6 +44,21 @@ export function AppProvider({ children }) {
     setTimeout(() => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), 4000);
   }, []);
 
+  // ── Communications log ───────────────────────────────────────────────────────
+  const logComm = useCallback((orderId, soNumber, customer, smsEntry, sentBy = 'system') => {
+    if (!smsEntry) return;
+    const entry = {
+      id:           `comm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      orderId,
+      soNumber,
+      customerName: customer?.name || '',
+      customerPhone: customer?.phone || '',
+      ...smsEntry,
+      sentBy,
+    };
+    dispatch({ type: 'SET_COMMUNICATIONS_LOG', payload: [entry, ...(state.communicationsLog || [])].slice(0, 1000) });
+  }, [state.communicationsLog]);
+
   // ── Inventory ───────────────────────────────────────────────────────────────
   const updateInventory = useCallback((newInventory) => {
     dispatch({ type: 'SET_INVENTORY', payload: newInventory });
@@ -557,21 +572,6 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_RIDERS', payload: state.riders.filter(r => r.id !== id) });
     notify('Rider removed.', 'success');
   }, [state.riders, notify]);
-
-  // ── Communications log ───────────────────────────────────────────────────────
-  const logComm = useCallback((orderId, soNumber, customer, smsEntry, sentBy = 'system') => {
-    if (!smsEntry) return;
-    const entry = {
-      id:           `comm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-      orderId,
-      soNumber,
-      customerName: customer?.name || '',
-      customerPhone: customer?.phone || '',
-      ...smsEntry,
-      sentBy,
-    };
-    dispatch({ type: 'SET_COMMUNICATIONS_LOG', payload: [entry, ...(state.communicationsLog || [])].slice(0, 1000) });
-  }, [state.communicationsLog]);
 
   const sendManualSMS = useCallback(async (orderId, phone, message, by) => {
     const order = state.salesOrders.find(o => o.id === orderId);
